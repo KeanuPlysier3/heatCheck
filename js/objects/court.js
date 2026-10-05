@@ -1,6 +1,10 @@
 import * as THREE from 'three/webgpu';
 import { Court } from '../constants/court';
 import { Colors } from '../constants/colors';
+import { Outline } from '../constants/outline';
+import { createOutlineMesh } from '../helpers/outline';
+import { createThreePointLine } from './threePointLine';
+import { createKey } from './key';
 
 export const createCourt = () => {
     // empty container, so the whole court can be moved or hidden as one thing
@@ -15,13 +19,34 @@ export const createCourt = () => {
     surroundMesh.receiveShadow = true;
     court.add(surroundMesh);
 
+    const floorTexture = new THREE.TextureLoader().load('assets/textures/courtTexture2.jpg');
+    floorTexture.colorSpace = THREE.SRGBColorSpace;
+    floorTexture.wrapS = THREE.RepeatWrapping;   // repeat horizontally
+    floorTexture.wrapT = THREE.RepeatWrapping;   // repeat vertically
+    floorTexture.repeat.set(2, 2);               // 2 copies across, 2 copies along
+    const floorMaterial = new THREE.MeshPhongMaterial({
+        map: floorTexture,          // the grain, cracks, speckles
+        color: Colors.court,   // tints all of it teal
+    });
+
     // the playing surface: a slab, a box is already flat so it needs no rotation
     const floorGeometry = new THREE.BoxGeometry(Court.width, Court.thickness, Court.depth);
-    const floorMaterial = new THREE.MeshPhongMaterial({ color: Colors.wood });
+
     const floorMesh = new THREE.Mesh(floorGeometry, floorMaterial);
     floorMesh.position.y = -Court.thickness / 2; // a box is centred on its middle, move it down so its top is exactly at y = 0
     floorMesh.receiveShadow = true;
     court.add(floorMesh);
+
+    // floor outline: the same box, Outline.thickness bigger on every side
+    const floorOutlineGeometry = new THREE.BoxGeometry(Court.width + Outline.thickness * 2, Court.thickness + Outline.thickness * 2, Court.depth + Outline.thickness * 2);
+    const floorOutlineMesh = createOutlineMesh(floorOutlineGeometry);
+    floorMesh.add(floorOutlineMesh);
+
+    const line = createThreePointLine();
+    court.add(line);
+
+    const key = createKey();
+    court.add(key);
 
     return court;
 };

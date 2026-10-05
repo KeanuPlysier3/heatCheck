@@ -131,3 +131,305 @@ A log of every code change in Basketball Shootout: what was added or changed, wh
   looking at the origin, and from there +y and +z both point to the top of the screen.
 - To remove the debug camera later: delete the block in `init`, the import, the `controls` variable and the
   `controls.update()` line.
+
+## 2026-10-04: black outlines around the objects
+
+**What changed:**
+
+- New `js/constants/outline.js`: an `Outline` object with `enabled` (true) and `thickness` (0.03 m).
+- New `js/helpers/outline.js`: exports `createOutlineMesh(outlineGeometry)`, which returns a black shell
+  mesh for a given geometry.
+- `js/constants/colors.js`: added `outline: 0x000000`.
+- `js/objects/hoop.js`: three outlines, each added as a child of the mesh it belongs to:
+  `poleOutlineGeometry` / `poleOutlineMesh`, `backBoardOutlineGeometry` / `backBoardOutlineMesh`,
+  `rimOutlineGeometry` / `rimOutlineMesh`. Two new imports.
+- `js/objects/court.js`: `floorOutlineGeometry` / `floorOutlineMesh`, a child of `floorMesh`. Two new
+  imports.
+- The surround has no outline: it is a flat plane that runs under everything, so it has no silhouette to
+  draw a line around.
+
+**Why:**
+
+- To give the objects a cartoon outline, so their shapes read clearly against each other and the
+  background.
+- three.js has no outline setting on a mesh. The course has no method for it either, so this is the
+  "inverted hull" technique, which only needs things the theory already covered: a second mesh, a material
+  and the scene graph.
+- The thickness is one constant so every outline can be tuned at the same time.
+- The thickness is a size in metres, not a scale factor. Scaling a copy by, say, 1.05 enlarges it from its
+  centre, so the outline would be 5% of each dimension: on the 15 m wide floor that is 37 cm at the sides
+  and 0.5 cm on top, on the pole it is thick at the ends and thin along the sides, and on the rim the ring
+  would get wider without the hole getting an outline. Building each shell from the object's own sizes plus
+  the same number of metres gives an outline that is equally thick everywhere.
+
+**How it works:**
+
+- For each object a second geometry is made with the same shape, `Outline.thickness` bigger on every side:
+  - box (backboard, floor): each of the three sizes gets `+ Outline.thickness * 2`, once for each of the
+    two opposite sides.
+  - cylinder (pole): the radius gets `+ Outline.thickness`, the height `+ Outline.thickness * 2`.
+  - torus (rim): the tube radius gets `+ Outline.thickness`. The ring radius stays the same, so the tube
+    grows around its own centre line and the inside of the hole gets an outline too.
+- `createOutlineMesh` wraps that geometry in a mesh with a black `MeshBasicMaterial`. Basic means it
+  ignores light, so the outline is the same black from every angle.
+- The material has `side: THREE.BackSide`: only the inside walls of the shell are drawn. The half of the
+  shell between the camera and the object is seen from its outside, so it is not drawn and the object stays
+  visible. The half behind the object is seen from its inside, so it is drawn. The object covers most of
+  it, and the part that sticks out past the object's edge is the outline. Without `BackSide` the bigger
+  black shell would simply hide the object.
+- Each outline mesh is added to its own object's mesh (`poleMesh.add(poleOutlineMesh)`), so it takes over
+  that mesh's position and rotation and needs none of its own. The rim outline lies flat because the rim
+  does.
+- `outlineMesh.visible = Outline.enabled` is set in the helper. `visible = false` makes the renderer skip
+  the mesh, so setting `Outline.enabled` to `false` removes every outline.
+- The outline meshes do not cast shadows, so the shadows keep the size of the real objects.
+
+**How to undo it:**
+
+- Quick: set `enabled: false` in `js/constants/outline.js`. The scene looks as it did before.
+- Complete: the outlines were added on top of commit `dc42902` with a clean working tree, so
+  `git restore js` followed by deleting `js/constants/outline.js` and the `js/helpers` folder brings the
+  code back to that commit. (`devDiary.md` would still have this entry.)
+
+## 2026-10-04: new colour palette
+
+**What changed:**
+
+- `js/constants/colors.js`: every colour value replaced, and four keys added.
+
+  | Key | Before | After |
+  | --- | --- | --- |
+  | `background` (new) | `0x8080`, written directly in `script.js` | `0xFFA552` sunset orange |
+  | `surround` | `0x00008b` | `0x4A3470` purple asphalt |
+  | `court` (was `wood`) | `0xCC8866` | `0x16C7B0` teal |
+  | `courtPaint` (new, not used yet) | | `0xFF3D8B` hot pink |
+  | `courtLines` (new, not used yet) | | `0xFFF1D0` cream |
+  | `hoopPole` | `0x808080` | `0xFFD400` yellow |
+  | `hoopBackboard` | `0xFFFFFF` | `0xFFF1D0` cream |
+  | `hoop` | `0xFF0000` | `0xFF5A1F` hot orange |
+  | `net` | `0xFFFFFF` | `0xFFF1D0` cream |
+  | `outline` | `0x000000` | `0x1B1030` very dark purple |
+  | `accent` (new, not used yet) | | `0xB6F500` lime green |
+
+- `js/objects/court.js`: the floor material uses `Colors.court` (the key was renamed from `wood`).
+- `js/script.js`: `scene.background` now uses `Colors.background`, and `Colors` is imported.
+
+**Why:**
+
+- The world should feel like a late-90s cartoon skate park: loud colours, a street court, dark outlines.
+- `wood` was renamed to `court` because the floor is now a painted street court and no longer hardwood, so
+  the old name would describe the wrong thing.
+- The background colour was the only colour not in `colors.js`. With it there, the whole palette is in one
+  file.
+
+**How it works:**
+
+- Nothing changes in how colours are applied: every material still reads its colour from the `Colors`
+  object, so swapping the values in one file recolours the whole scene.
+- The palette is built on opposite colours. Orange (sky) and teal (court) sit across from each other on the
+  colour wheel, which makes the court stand out from the background. Pink and purple do the same on a
+  smaller scale.
+- There is no pure white and no pure black. Cream (`0xFFF1D0`) and very dark purple (`0x1B1030`) take their
+  place, so the lightest and darkest colours still belong to the same warm/purple family as the others.
+- `courtPaint`, `courtLines` and `accent` are in the file for the court markings and the UI, which do not
+  exist yet.
+- The old values are kept in a comment at the bottom of `colors.js`, so going back means copying them into
+  the object.
+- The hoop materials still have `emissive` set to their own colour, so the hoop shows its new colours at
+  full strength without shading. The lighting was not changed here.
+
+## 2026-10-04: hoop reads its sizes from the constants
+
+**What changed:** `js/objects/hoop.js`.
+
+- The nine local size variables are gone: `poleHeight`, `poleRadius`, `backboardWidth`, `backboardHeight`,
+  `backboardThickness`, `backboardBottom`, `rimHeight`, `rimRadius`, `rimThickness`.
+- In their place, one statement at the top of `createHoop()` takes the same nine names out of
+  `Court.Hoop`, the object in `js/constants/court.js`.
+- Nothing else in the file changed, and the values are the same, so the hoop looks exactly as before.
+
+**Why:**
+
+- The hoop's sizes were typed inside `createHoop()`, where no other file could read them. The three-point
+  line needs the rim's position as the centre of its arc, and later the physics colliders and the shot
+  calculation need the rim and backboard sizes too.
+- With the sizes in the constants file, there is one place that says how big the hoop is. Before this
+  change the constants file and `hoop.js` each had their own copy, and changing one would not have changed
+  the other.
+
+**How it works:**
+
+- `const { poleHeight, poleRadius, ... } = Court.Hoop;` is destructuring: it creates a local variable for
+  each name listed and fills it with the property of the same name from the object. It is short for
+  writing `const poleHeight = Court.Hoop.poleHeight;` nine times.
+- Because the local names are the same as before, every line below it (geometries, positions, outlines)
+  keeps working without being touched.
+- `Court` was already imported in `hoop.js` for `Court.depth`, so no new import was needed.
+- `backboardFront` is still a local variable. It is not a size but a position calculated from two of the
+  sizes, so it stays next to the code that uses it.
+
+## 2026-10-04: key sizes added to the court constants
+
+**What changed:** `js/constants/court.js` has a new `key` group inside `Court`:
+
+| Key | Value | Meaning |
+| --- | --- | --- |
+| `width` | 4.9 | along x, centred on the hoop |
+| `length` | 5.8 | along z, from the baseline to the free-throw line |
+| `freeThrowCircleRadius` | 1.8 | the circle centred on the middle of the free-throw line |
+| `noChargeRadius` | 1.25 | the small semicircle under the hoop, measured from the point under the rim |
+
+**Why:** the key is the next court marking to be drawn (`js/objects/key.js`). Its sizes go in the constants
+first, so the drawing and anything that later needs to know where the key is read the same numbers, the
+same way the three-point line does.
+
+**How it works:**
+
+- These are the official FIBA measurements, in metres like every other size in the file. FIBA is used
+  because the court (28 x 15, here cut to a 14 m half) and the three-point line (6.75 m) are FIBA sizes
+  too. An NBA key would be 4.88 wide and 5.79 long.
+- The values are only data. Nothing reads them yet, so the scene looks the same.
+- `length` is measured from the baseline, not from the rim, because the key is a rectangle that starts at
+  the baseline. With the baseline at `Court.depth / 2`, the free-throw line is at
+  `Court.depth / 2 - Court.key.length`.
+- The free-throw circle's centre is the middle of the free-throw line, so its position follows from
+  `length`. The no-charge semicircle is centred under the rim, at `Court.Hoop.rimZ`, like the three-point
+  arc.
+
+## 2026-10-04: hoop moved to its official position, built around the rim
+
+**What changed:**
+
+- `js/constants/court.js`
+  - Three new values in `Court.Hoop`: `rimFromBaseline` (1.575), `poleBehindBaseline` (0.6) and
+    `armThickness` (0.12).
+  - `Court.Hoop.rimZ` is now `Court.depth / 2 - Court.Hoop.rimFromBaseline`, which is 5.425. It used to be
+    calculated from the pole (pole position minus pole radius, backboard thickness and rim size) and was
+    6.6.
+  - `Court.Hoop.z` is removed. Nothing used it apart from the old `rimZ` formula.
+- `js/objects/hoop.js`, rewritten around a new origin:
+  - The hoop group's origin is now the point on the floor under the centre of the rim. It used to be the
+    foot of the pole.
+  - The rim sits on that origin. The backboard is directly behind it. The pole stands 0.6 m behind the
+    baseline, with its foot on the surround.
+  - New part: the arm (`armGeometry`, `armMesh`), a beam from the back of the backboard to the pole, with
+    its own outline (`armOutlineGeometry`, `armOutlineMesh`).
+  - The whole hoop is placed with `hoop.position.set(0, 0, Court.Hoop.rimZ)`. It used to be
+    `Court.depth / 2`.
+- `threePointLine.js` and `key.js` were not touched.
+
+**Why:**
+
+- The key's side lines looked too long. They were correct (5.8 m from the baseline), but the rim hung only
+  0.4 m from the baseline where the official distance is 1.575 m. The three-point arc is measured from the
+  rim, so the whole arc sat 1.175 m too close to the baseline while the key, measured from the baseline,
+  stayed put.
+- `rimZ` was calculated from the pole, so any change to the pole or a new part between pole and rim would
+  have moved the rim as a side effect, and with it the three-point line. The rim is the point the game
+  measures everything from (the arc, the scoring, the shot's target, later the physics), so it is now the
+  value that is stated directly, and the pole is placed from it.
+
+**How it works:**
+
+- `rimFromBaseline` is the one number that decides where the rim is. `rimZ` is the baseline's position
+  (`Court.depth / 2` = 7) minus that distance.
+- Inside `createHoop()` every part is positioned relative to the rim's point, along z. Positive z is
+  towards the baseline:
+
+  | Part | z from the rim's point | How it is calculated |
+  | --- | --- | --- |
+  | rim | 0 | it is the origin |
+  | backboard, front face | 0.25 | `rimRadius + rimThickness`, the ring's outer edge |
+  | backboard, back face | 0.30 | front face + `backboardThickness` |
+  | pole | 2.175 | `rimFromBaseline + poleBehindBaseline` |
+  | arm | from 0.30 to 2.175 | length = pole - back of the backboard = 1.875 |
+
+- The arm is a box, positioned by its centre, so its z is the midpoint of its two ends:
+  `(backboardBack + poleZ) / 2`. Its height is the middle of the backboard.
+- The pole stands off the court slab, on the surround, which lies `Court.thickness` (0.2) lower than the
+  playing surface. So the pole is `poleHeight + Court.thickness` long, and its centre is halfway between
+  its foot (-0.2) and its top (3.5): `(poleHeight - Court.thickness) / 2`.
+- The results, all following from the constants without any change to the line files:
+
+  | | Before | After | Official |
+  | --- | --- | --- | --- |
+  | rim to baseline | 0.4 | 1.575 | 1.575 |
+  | rim to free-throw line | 5.4 | 4.225 | 4.225 |
+  | free-throw line to the top of the arc | 1.35 | 2.525 | 2.525 |
+  | three-point corner piece | 1.81 | 2.99 | 2.99 |
+
+- One difference from an official hoop is left in on purpose: the rim touches the backboard, so the
+  backboard's face is 1.325 m from the baseline. On a real hoop a small bracket leaves a gap and the face
+  is at 1.2 m. The rim's position, which is what the game uses, is exact.
+
+## 2026-10-04: court lines changed from cream to yellow
+
+**What changed:** in `js/constants/colors.js`, `courtLines` went from `0xFFF1D0` (cream) to `0xFFD400`
+(yellow, the same value as `hoopPole`). The old value is kept in the comment on that line.
+
+**Why:**
+
+- Cream lines on the teal court looked pale. Cream is a light, low-saturation colour, and the lines are
+  lit like everything else, so in the shade of the scene's single light they turn greyish and lose
+  definition against the textured floor.
+- Yellow is the colour of painted lines on playgrounds and streets, which fits the street-court setting
+  better than the cream of an indoor gym floor.
+- Yellow keeps its strength next to teal: the two are far apart on the colour wheel, and yellow is
+  saturated where cream is not.
+- Using the pole's yellow, and not a new shade, keeps the palette small. The court markings and the hoop's
+  frame now read as one painted set, and cream is left for the backboard and the net.
+
+**How it works:** the three-point line (`threePointLine.js`) and the key (`key.js`) both build their
+material from `Colors.courtLines`, so the one value recolours every line. No other file changed.
+
+## 2026-10-05: texture path updated for the build
+
+**What changed:** `js/objects/court.js`, the floor texture path, from `'assets/textures/courtTexture2.jpg'`
+to `'textures/courtTexture2.jpg'`. The texture files were moved from `assets/textures/` to
+`public/textures/`.
+
+**Why:** in the build (`npm run build`, tested with `npm run preview`) the floor texture failed to load.
+The files were in `assets/textures/` at the project root, and Vite did not copy them into `dist/`, the
+folder that becomes the website. The dev server had hidden the problem because it serves the whole project
+folder.
+
+**How it works:**
+
+- Vite puts two kinds of files into the build: files the code `import`s, which it follows and bundles, and
+  every file in `public/`, which it copies as it is. A path inside a string, like the one passed to
+  `TextureLoader().load(...)`, is neither: Vite sees only text, not a file reference.
+- Files in `public/` are served from the root of the site, without `public` in the path. So
+  `public/textures/courtTexture2.jpg` is at `textures/courtTexture2.jpg`, both on the dev server and in the
+  build.
+- The path has no leading slash, so it is relative to the page. That keeps it working when the site is
+  served from a subfolder, as it will be on GitHub Pages (`/heatCheck/`).
+
+## 2026-10-05: build setup for GitHub Pages
+
+**What changed:**
+
+- `package.json`: two scripts next to `dev`: `"build": "vite build"` and `"preview": "vite preview"`.
+- New `vite.config.js` in the project root, with `base: './'`.
+
+**Why:** the site will be published on GitHub Pages, which needs a built version of the project, and serves
+it from a subfolder named after the repo (`https://keanuplysier3.github.io/heatCheck/`), not from the root
+of the domain.
+
+**How it works:**
+
+- `npm run build` runs `vite build`, which bundles the code and three.js into one JavaScript file, copies
+  everything in `public/`, and writes the finished site to `dist/`. `npm run preview` serves that `dist/`
+  folder locally, so the real build can be tested before it goes online.
+- Vite reads `vite.config.js` automatically when it starts, because of the file's name and place, next to
+  `package.json`. It does not need to be imported anywhere.
+- By default Vite writes the script tag in the built `index.html` with an absolute path,
+  `/assets/index-....js`. The leading `/` means "from the root of the domain", so on GitHub Pages the
+  browser would ask for `keanuplysier3.github.io/assets/...` and get nothing, because the site is in
+  `/heatCheck/`. That gives a blank page.
+- `base: './'` makes Vite write relative paths: `./assets/index-....js`, meaning "next to this
+  `index.html`". That works wherever the site is served from: in `preview`, on Pages, or under a renamed
+  repo.
+- In the build the script tag is moved from the bottom of `<body>` into `<head>`, and the inline CSS is
+  compressed. That is normal Vite output.
+- The build warns that the JavaScript file is over 500 kB. That is almost all three.js (its WebGPU build is
+  large). The download is about 236 kB compressed, which is fine for a game.

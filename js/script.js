@@ -4,6 +4,7 @@ import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'; // DEBUG ONLY, see the orbit camera block in init
 import { createCourt } from './objects/court';
 import { createHoop } from './objects/hoop';
+import { Colors } from './constants/colors';
 
 let canvas;
 let renderer;
@@ -47,11 +48,11 @@ const init = async () => {
     gui.add(controls, 'enabled').name('orbit camera (debug)'); // checkbox to switch the mouse control off
 
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x8080);
+    scene.background = new THREE.Color(Colors.background);
 
 
-    const light = new THREE.DirectionalLight(0xffffff, 1);
-    light.position.set(0, 20, 20);
+    const light = new THREE.DirectionalLight(0xffffff, 14);
+    light.position.set(10, 20, 20);
     scene.add(light);
     light.castShadow = true; // enable shadows for this light
     light.shadow.mapSize.width = 2048; // increase the shadow map resolution for better quality

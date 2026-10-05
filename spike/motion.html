@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>motionSpike</title>
+    <style>
+        /* the canvas lies exactly on top of the video, so the dots line up with the image */
+        #stage {
+            position: relative;
+            display: inline-block;
+        }
+
+        #stage video,
+        #stage canvas {
+            display: block;
+        }
+
+        #stage canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        /* the live measurements, large enough to read while standing back from the screen */
+        #readout {
+            font: 22px/1.4 monospace;
+            margin: 12px 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="stage">
+        <video></video>
+        <canvas id="overlay"></canvas>
+    </div>
+    <pre id="readout">waiting for the camera and the model…</pre>
+    <script type="module" src="./js/script.js"></script>
+</body>
+</html>

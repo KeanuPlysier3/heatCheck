@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>motionSpike 2: one-motion shot</title>
+    <style>
+        /* the canvas lies exactly on top of the video, so the dots line up with the image */
+        #stage {
+            position: relative;
+            display: inline-block;
+        }
+
+        #stage video,
+        #stage canvas {
+            display: block;
+        }
+
+        #stage canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        /* the live measurements, large enough to read while standing back from the screen */
+        #readout {
+            font: 22px/1.4 monospace;
+            margin: 12px 0;
+        }
+
+        /* the big SHOT! that flashes over the video when a shot is recognised */
+        #shotBanner {
+            position: absolute;
+            top: 20px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font: bold 96px sans-serif;
+            color: limegreen;
+            text-shadow: 0 0 12px black;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="stage">
+        <video></video>
+        <canvas id="overlay"></canvas>
+        <div id="shotBanner" hidden>SHOT!</div>
+    </div>
+    <pre id="readout">waiting for the camera and the model…</pre>
+    <script type="module" src="./js/script2.js"></script>
+</body>
+</html>

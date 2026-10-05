@@ -433,3 +433,247 @@ of the domain.
   compressed. That is normal Vite output.
 - The build warns that the JavaScript file is over 500 kB. That is almost all three.js (its WebGPU build is
   large). The download is about 236 kB compressed, which is fine for a game.
+
+## 2026-10-05: motion spike, steps 1 and 2 (webcam and WebGPU backend)
+
+**What changed:**
+
+- Installed `@tensorflow-models/pose-detection` (2.1.3), `@tensorflow/tfjs-core`,
+  `@tensorflow/tfjs-converter` and `@tensorflow/tfjs-backend-webgpu` (all 4.22.0). npm also installed
+  their required extras: the WebGL, WASM and CPU backends and `@mediapipe/pose`.
+- New `spike/motion.html`: a page with a `<video>` element that loads `spike/js/script.js`.
+- New `spike/js/script.js`:
+  - asks for the webcam with `getUserMedia` and shows it in the video element;
+  - imports TensorFlow.js and its WebGPU backend, switches to it with `tf.setBackend('webgpu')` and logs
+    whether that worked and which backend is in use.
+
+**Why:** the motion spike is a throwaway test page that checks whether webcam shooting can work at all,
+before any of it goes into the game. Steps 1 and 2 answer the first question: does TensorFlow.js run on
+WebGPU in this browser? The spike sits inside the project so it shares `node_modules`, and it is not part
+of the build because nothing in the game imports it.
+
+**How it works:**
+
+- `navigator.mediaDevices.getUserMedia(constraints)` asks the browser for the camera and returns a
+  `MediaStream`. The constraints ask for the front camera (`facingMode: "user"`) at 1280 x 720 if possible
+  (`ideal` is a request, not a requirement). It only works in a secure context, which `localhost` is.
+- A live stream is not a file with an address, so it is connected with `video.srcObject = stream`, not
+  `src`. `video.play()` starts it; without that the element shows nothing, and no error is raised.
+- `import '@tensorflow/tfjs-backend-webgpu'` has no name and no `from`: it is imported only so it registers
+  itself as a backend called `'webgpu'`. Installing a backend is not enough; it has to be imported.
+- `tf.setBackend('webgpu')` returns a promise that resolves to `true` or `false`. It does not throw when a
+  backend fails, so the log prints the result and `tf.getBackend()`, the backend actually in use.
+- The page must be opened through Vite (`npm run dev`, `localhost:5173/spike/motion.html`). A plain file
+  server like Live Server cannot turn package names like `'@tensorflow/tfjs-core'` into files.
+
+**Result:** `webgpu started: true | backend in use: webgpu` (Windows, AMD Radeon RX 9070 XT). The first
+risk, whether TensorFlow.js runs on WebGPU at all, is cleared for this machine. TensorFlow.js also warns
+that the `powerPreference` option is ignored on Windows: it asks for the high-performance GPU, and Chrome
+on Windows uses the default GPU instead. With one graphics card that is the same card; on a laptop with two
+GPUs it could mean the weaker, built-in one is used.
+
+## 2026-10-05: motion spike, step 3 (MoveNet running) and the MediaPipe stand-in
+
+**What changed:**
+
+- `vite.config.js`: a `resolve.alias` that sends every import of `'@mediapipe/pose'` to
+  `js/shims/mediapipe-pose.js`.
+- New `js/shims/mediapipe-pose.js`: exports an empty `class Pose {}`.
+- `spike/js/script.js`:
+  - `init` is now `async` and runs its steps in a fixed order, each one awaited: switch to the WebGPU
+    backend, start the webcam (`await getMedia`, which now does `await video.play()`), create the MoveNet
+    detector, then start the detection loop.
+  - The separate `tf.setBackend(...).then(...)` at the top of the file is gone; step 1 of `init` does it.
+  - New `detect` function: runs `detector.estimatePoses(video)`, logs the result, and schedules itself for
+    the next frame with `requestAnimationFrame`.
+
+**Why:**
+
+- Importing `pose-detection` stopped Vite with `MISSING_EXPORT: "Pose" is not exported by
+  @mediapipe/pose`. `pose-detection` always imports `Pose` from that package, for its BlazePose model's
+  MediaPipe engine. `@mediapipe/pose` is an old-style script that puts its contents on the global `window`
+  and has no exports, so the import cannot be resolved. MoveNet never uses it.
+- The first detection failed with `importExternalTexture ... doesn't have back resource`: MoveNet tried to
+  read a frame from the video before the video had one, because `getMedia` and `video.play()` were not
+  awaited and the code ran ahead of the camera.
+
+**How it works:**
+
+- `resolve.alias` tells Vite: when code imports this name, load that file instead. The stand-in only has to
+  export something called `Pose` so the import resolves. It is never called. It lives in the game's
+  `js/shims/` and not in `spike/`, because the game will import `pose-detection` too, and the spike folder
+  will be deleted later. (If BlazePose with the MediaPipe engine were ever needed, this stand-in would break
+  it.)
+- `fileURLToPath(new URL('./js/shims/mediapipe-pose.js', import.meta.url))` turns the path, relative to
+  `vite.config.js`, into the full path on disk, which is how the Vite documentation writes aliases.
+- After changing the config, Vite's library cache has to be rebuilt once with `npx vite --force`.
+- `await` pauses `init` until each step is really finished. `video.srcObject = stream` only connects the
+  stream; the first frame and the video's size arrive a moment later. `await video.play()` resolves once
+  playback has started, so a frame exists when MoveNet first reads the video.
+- `createDetector(SupportedModels.MoveNet, { modelType: SINGLEPOSE_LIGHTNING })` downloads and prepares the
+  model the first time. Single pose tracks one person; Lightning is the fast MoveNet variant, chosen because
+  release timing needs many detections per second.
+- `detect` uses `requestAnimationFrame` because this page has no three.js renderer. Because the next call is
+  scheduled only after `await estimatePoses(...)` has finished, a slow detection never overlaps the next one.
+- Each result is an array with one pose, whose `keypoints` are 17 objects with `x`, `y` (video pixels, y
+  grows downward), `score` (confidence 0 to 1) and `name`.
+
+## 2026-10-05: motion spike, step 4 (green dots on the keypoints)
+
+**What changed:**
+
+- `spike/motion.html`: the video is wrapped in a `<div id="stage">` together with a new
+  `<canvas id="overlay">`, plus a small `<style>` block that lays the canvas exactly on top of the video.
+- `spike/js/script.js`:
+  - new variables `canvas` and `ctx`, and a constant `minScore = 0.3`;
+  - in `init`, after the webcam is playing, the canvas is given the video's size and its 2D drawing
+    context is stored in `ctx`;
+  - `detect` calls a new function `drawKeypoints(poses)` in place of `console.log(poses)`;
+  - new function `drawKeypoints`, which clears the canvas and draws a green circle on each keypoint.
+
+**Why:** to see whether MoveNet is actually tracking the body, and how well, in this room's light and at
+this distance. Numbers in the console can't show that; dots that follow the arms can. Removing the
+`console.log` also stops the console being flooded every frame, which slows the page down.
+
+**How it works:**
+
+- The stage `div` is `position: relative` and the canvas inside it is `position: absolute` at `top: 0;
+  left: 0`, so the canvas is drawn over the video, starting at the same corner. `display: inline-block`
+  makes the div only as big as the video.
+- MoveNet returns keypoint positions in the video's own pixels. Setting `canvas.width` and
+  `canvas.height` to `video.videoWidth` and `videoHeight` gives the canvas the same pixel grid, so a
+  keypoint's `x` and `y` can be drawn without any conversion. This is done after `await getMedia(...)`,
+  because the video's size is 0 until its first frame has arrived.
+- `canvas.getContext("2d")` returns the object that draws on the canvas (`ctx`).
+- Every frame, `drawKeypoints` first clears the whole canvas, otherwise the dots of every previous frame
+  would stay and smear into lines. If no person is found (`poses` is empty) it stops there.
+- For each of the 17 keypoints of the first pose, it skips points with a `score` below `minScore`: the model
+  is guessing those, for example a wrist that is out of view. The rest get a filled circle:
+  `ctx.arc(x, y, 6, 0, Math.PI * 2)` is a circle of radius 6 px going all the way round (0 to 2π radians),
+  and `ctx.fill()` paints it in the current `fillStyle`, lime green.
+
+## 2026-10-05: motion spike, step 5 (measuring the arms)
+
+**What changed:**
+
+- `spike/motion.html`: a `<pre id="readout">` under the video, with a style for large monospace text.
+- `spike/js/script.js`:
+  - a `shot` object with the two thresholds: `loadedMaxAngle` (110) and `releaseMinAngle` (160);
+  - `point(pose, name)`: finds a keypoint by its name;
+  - `angleAt(a, b, c)`: the angle at point `b`, in degrees;
+  - `measureArm(pose, side)`: elbow angle, wrist above head, hand low, and from those `loaded` and
+    `released`, for the left or the right arm;
+  - `drawArm(arm)`: a line shoulder → elbow → wrist, white, orange when loaded, red at a release;
+  - `showReadout(left, right)`: the live numbers for both arms under the video;
+  - `detect` calls these every frame.
+
+**Why:** recognising a shot is done with rules on the keypoints, not a trained model. A model would still
+need the same load-then-release logic and a confidence threshold, plus hundreds of recorded example
+frames, and when it misfires there is no number to look at. With rules, a missed shot shows exactly which
+value fell short. This step only measures and shows; it does not decide on shots yet. The thresholds have
+to be tuned by watching real values while moving, and that needs them on screen first.
+
+**How it works:**
+
+- **Elbow angle** (`angleAt(shoulder, elbow, wrist)`):
+  1. Two arrows starting at the elbow: shoulder minus elbow, and wrist minus elbow.
+  2. Their dot product, `ab.x * cb.x + ab.y * cb.y`: positive when the arrows point roughly the same way,
+     negative when they point apart.
+  3. Divided by both arrows' lengths (`Math.hypot`), which leaves the cosine of the angle between them, a
+     value from -1 (straight arm, arrows opposite) through 0 (90°) to 1 (folded completely).
+  4. `Math.acos` turns the cosine into the angle in radians, `* 180 / Math.PI` into degrees.
+  5. The cosine is clamped to -1..1 first: on a dead-straight arm, rounding can give -1.0000001, and
+     `acos` of that is `NaN`.
+  Checked with known arms: a 90° corner gives 90, a straight line 180, the worked example 108.
+- **Wrist above head:** `wrist.y < nose.y`. y = 0 is the top of the video and grows downward, so a higher
+  point has a smaller y.
+- **Hand low:** `wrist.y > shoulder.y`, the wrist is below the shoulder.
+- **Loaded:** hand low and elbow angle under `loadedMaxAngle`. **Released:** wrist above head and elbow
+  angle over `releaseMinAngle`. These are ranges, not exact poses: any angle from 160° to 180° counts as
+  open, so a sloppy shot still passes.
+- If the model's score for the shoulder, elbow, wrist or nose is under `minScore`, `measureArm` returns
+  `null` and that arm is shown as "not visible enough". No decision is made on a guessed point.
+- Angles do not depend on the distance to the camera or on body size, so the same thresholds work for any
+  player.
+
+## 2026-10-05: motion spike, step 6 (one-motion shot), in motion2 / script2
+
+**What changed:**
+
+- New `spike/motion2.html`, a copy of `motion.html` that loads `script2.js`, with a big "SHOT!" banner
+  (`#shotBanner`) laid over the video.
+- New `spike/js/script2.js`, a copy of `script.js` with:
+  - two more values in `shot`: `loadTimeout` (1500 ms) and `cooldown` (1000 ms);
+  - a `shotState` object that remembers, between frames, when each arm was last loaded, until when the
+    cooldown runs, and how many shots were recognised;
+  - `updateShot(side, arm, now)`, called for both arms every frame, which turns the per-frame labels into
+    one shot;
+  - `shotReleased(time, side)`, the event a recognised shot ends in: here it counts the shot, logs it and
+    shows the banner for 0.6 s;
+  - the readout shows each arm's state (ready, loaded and for how long, cooldown) and the shot count.
+- `motion.html` and `script.js` are unchanged, so the measuring version stays available.
+
+**Why:** the measurements from step 5 label each frame correctly, but a shot is a movement, not a frame. A
+single frame cannot tell a shot from someone raising their arms to stretch, and the follow-through after a
+release would keep counting as new releases. The game needs one shot, counted once, at the moment of
+release, because that moment is compared with the shot meter.
+
+**How it works:**
+
+- `updateShot` works per arm, and a shot is: **that arm loaded, then that same arm released, within
+  `loadTimeout`**.
+  - While the arm is loaded, `loadedAt[side]` is set to the current time on every frame, so it always holds
+    the last moment the arm was still loaded. The timeout therefore measures the time from leaving the load
+    position to the release, not how long the ball was held.
+  - A release with no load remembered (`loadedAt` is `null`) is ignored. That is what filters out stretching
+    and waving.
+  - If more than `loadTimeout` has passed since the last loaded frame, the load is forgotten.
+  - On a release that follows a load, both arms' `loadedAt` are cleared, the cooldown starts, and
+    `shotReleased` fires with the time of that frame. Clearing both arms means a two-handed shot counts
+    once.
+  - During the cooldown every frame is ignored, so the arms still being up after the shot do not count
+    again.
+- A frame where the model is unsure about the arm's points (`arm` is `null`) changes nothing: a blurred
+  wrist mid-shot does not cancel the load.
+- `performance.now()` gives the time in milliseconds since the page loaded; all times in `shotState` use
+  it.
+- `shotReleased(time, side)` is the spike's version of the game's `shotReleased(time)` event. In the game,
+  the same call will start the shot, with `time` compared to the shot meter.
+- Checked with a simulation of scripted frames: a normal shot fires once at the release; arms raised without
+  loading fire nothing; a release 2 s after the load fires nothing; a second release inside the cooldown is
+  ignored while a new shot after it fires; two hands loading and releasing together fire once.
+
+## 2026-10-05: motion spike, conclusion: go
+
+No code changed in this entry. It records the outcome of the motion spike (`spike/motion.html`,
+`spike/motion2.html`), which was planned for 5-7 October with the decision due on 12 October.
+
+**What the spike had to answer, and the results:**
+
+| Question | Result |
+| --- | --- |
+| Does TensorFlow.js run on the WebGPU backend? | Yes. `tf.setBackend('webgpu')` returns `true` and `tf.getBackend()` reports `webgpu` (Windows, AMD Radeon RX 9070 XT). |
+| Is MoveNet fast enough? | Yes. MoveNet SinglePose Lightning keeps up with real shooting speed. Not measured as a number: by eye it is clearly fast enough for the game, and a figure would not change the decision. |
+| Does it track the body well? | Yes. The keypoints follow the shoulders, elbows and wrists closely, including with the arms above the head. |
+| Can a shot be recognised reliably? | Yes. The per-frame labels (loaded, released) were accurate, and the one-motion shot detection (load, then release of the same arm within 1.5 s, then a 1 s cooldown) recognised shots very accurately in testing. |
+
+**Decision: go.** Webcam motion stays the main way to play. Keyboard/click stays the fallback and must keep
+working without a webcam.
+
+**Settings that worked:** `minScore` 0.2, `loadedMaxAngle` 110°, `releaseMinAngle` 160°, `loadTimeout`
+1500 ms, `cooldown` 1000 ms.
+
+**Still open:**
+
+- MoveNet has not yet run next to the three.js scene. On the spike page it has the GPU to itself; in the
+  game it shares it with the court, the shadows and later the fire shader. This will show when the
+  detection moves into the game: if the scene or the shot detection stutters, that sharing is the first
+  thing to check.
+- Tested by one person, in one room's light. Other players, distances and lighting are untested.
+- Two workarounds carry over into the game: the `@mediapipe/pose` stand-in (`js/shims/mediapipe-pose.js`,
+  aliased in `vite.config.js`), and the strict order of starting the backend, then the webcam, then the
+  detector.
+
+**Next for this code:** the detection (`measureArm`, `angleAt`, `updateShot` and the `shot` settings)
+moves into the game as `js/input/motion.js`, where a recognised shot calls the game's `shotReleased(time)`.
+The `spike/` folder can be deleted after that; it is not part of the build.

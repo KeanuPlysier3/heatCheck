@@ -381,3 +381,55 @@ same way the three-point line does.
 
 **How it works:** the three-point line (`threePointLine.js`) and the key (`key.js`) both build their
 material from `Colors.courtLines`, so the one value recolours every line. No other file changed.
+
+## 2026-10-05: texture path updated for the build
+
+**What changed:** `js/objects/court.js`, the floor texture path, from `'assets/textures/courtTexture2.jpg'`
+to `'textures/courtTexture2.jpg'`. The texture files were moved from `assets/textures/` to
+`public/textures/`.
+
+**Why:** in the build (`npm run build`, tested with `npm run preview`) the floor texture failed to load.
+The files were in `assets/textures/` at the project root, and Vite did not copy them into `dist/`, the
+folder that becomes the website. The dev server had hidden the problem because it serves the whole project
+folder.
+
+**How it works:**
+
+- Vite puts two kinds of files into the build: files the code `import`s, which it follows and bundles, and
+  every file in `public/`, which it copies as it is. A path inside a string, like the one passed to
+  `TextureLoader().load(...)`, is neither: Vite sees only text, not a file reference.
+- Files in `public/` are served from the root of the site, without `public` in the path. So
+  `public/textures/courtTexture2.jpg` is at `textures/courtTexture2.jpg`, both on the dev server and in the
+  build.
+- The path has no leading slash, so it is relative to the page. That keeps it working when the site is
+  served from a subfolder, as it will be on GitHub Pages (`/heatCheck/`).
+
+## 2026-10-05: build setup for GitHub Pages
+
+**What changed:**
+
+- `package.json`: two scripts next to `dev`: `"build": "vite build"` and `"preview": "vite preview"`.
+- New `vite.config.js` in the project root, with `base: './'`.
+
+**Why:** the site will be published on GitHub Pages, which needs a built version of the project, and serves
+it from a subfolder named after the repo (`https://keanuplysier3.github.io/heatCheck/`), not from the root
+of the domain.
+
+**How it works:**
+
+- `npm run build` runs `vite build`, which bundles the code and three.js into one JavaScript file, copies
+  everything in `public/`, and writes the finished site to `dist/`. `npm run preview` serves that `dist/`
+  folder locally, so the real build can be tested before it goes online.
+- Vite reads `vite.config.js` automatically when it starts, because of the file's name and place, next to
+  `package.json`. It does not need to be imported anywhere.
+- By default Vite writes the script tag in the built `index.html` with an absolute path,
+  `/assets/index-....js`. The leading `/` means "from the root of the domain", so on GitHub Pages the
+  browser would ask for `keanuplysier3.github.io/assets/...` and get nothing, because the site is in
+  `/heatCheck/`. That gives a blank page.
+- `base: './'` makes Vite write relative paths: `./assets/index-....js`, meaning "next to this
+  `index.html`". That works wherever the site is served from: in `preview`, on Pages, or under a renamed
+  repo.
+- In the build the script tag is moved from the bottom of `<body>` into `<head>`, and the inline CSS is
+  compressed. That is normal Vite output.
+- The build warns that the JavaScript file is over 500 kB. That is almost all three.js (its WebGPU build is
+  large). The download is about 236 kB compressed, which is fine for a game.

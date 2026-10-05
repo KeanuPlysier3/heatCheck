@@ -19,7 +19,7 @@ export const createCourt = () => {
     surroundMesh.receiveShadow = true;
     court.add(surroundMesh);
 
-    const floorTexture = new THREE.TextureLoader().load('assets/textures/courtTexture2.jpg');
+    const floorTexture = new THREE.TextureLoader().load('textures/courtTexture2.jpg'); // the file is in public/textures/, public/ is served as the site's root
     floorTexture.colorSpace = THREE.SRGBColorSpace;
     floorTexture.wrapS = THREE.RepeatWrapping;   // repeat horizontally
     floorTexture.wrapT = THREE.RepeatWrapping;   // repeat vertically

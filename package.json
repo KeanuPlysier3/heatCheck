@@ -3,9 +3,11 @@
   "version": "1.0.0",
   "description": "A low-poly basketball shootout built with three.js (`WebGPURenderer`). Hit the green zone of the shot meter\r to score, move around the arc with every make, and set the ball on fire with a streak. 60 seconds, one high\r score. Play with your webcam (shoot with your arms), keyboard, or a controller.",
   "main": "index.js",
- "scripts": {
-  "dev": "vite"
-},
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/KeanuPlysier3/heatCheck.git"

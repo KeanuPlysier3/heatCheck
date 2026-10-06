@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { motionDetection } from './motionDetection.js';
 import { AxisGridHelper } from './classes/AxisGridHelper.js';
 import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'; // DEBUG ONLY, see the orbit camera block in init
@@ -34,13 +35,8 @@ const init = async () => {
   
     camera.lookAt(0, 0, 0);
 
-    // ---------------------------------------------------------------------------------------------
     // DEBUG ONLY: orbit camera
-    // lets me fly around the scene with the mouse to check where objects are positioned.
-    // left-drag = orbit, right-drag = pan, scroll = zoom.
-    // this is NOT part of the game: the real game gets a fixed camera behind the shooter.
-    // to remove it: delete this block, the import, the `controls` variable and controls.update() in render.
-    // ---------------------------------------------------------------------------------------------
+
     controls = new OrbitControls(camera, renderer.domElement); // moves `camera`, listens for mouse input on the canvas
     controls.enableDamping = true; // the movement glides to a stop instead of stopping dead
     controls.dampingFactor = 0.05;//glide 
@@ -81,6 +77,8 @@ const init = async () => {
     const court = createCourt();
     scene.add(court);
     makeAxisGrid(court, 'court', 15);
+
+    motionDetection(); // start the motion detection and shot counting
 
 
 }

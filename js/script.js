@@ -17,7 +17,7 @@ let controls; // DEBUG ONLY: the orbit camera
 let joints; // the player's shoulder and elbow pivots, filled in init
 const gui = new GUI();
 
-// puts both of the player's arms in one of the poses from Player.poses
+
 const applyPose = (pose) => {
     const toRadians = THREE.MathUtils.degToRad; // the poses are in degrees, rotations in radians
     ['left', 'right'].forEach((side) => {
@@ -30,30 +30,34 @@ const applyPose = (pose) => {
     });
 };
 
-// called by the motion detection every frame, with the two measured arms: [left, right]
-const handlePose = (arms) =>{
-  
-    let released = false;
-    // check if both arms are loaded
-    const loaded = arms.every((arm) => arm?.loaded);  
+const poseHold = {
+    loaded: 1500,   
+    release: 800,   
+};
+let poseUntil = 0; // the current pose is kept until this time
+
+const handlePose = (arms) => {
+    const now = performance.now();
+    const loaded = arms.every((arm) => arm?.loaded);
+    const released = arms.some((arm) => arm?.released);
 
     if (loaded) {
         applyPose(Player.poses.loaded);
+        poseUntil = now + poseHold.loaded;      // restart the clock on every loaded frame
         return;
     }
 
-
-    arms.forEach((arm) => {
-        if (arm?.released) {
-            released = true;
-        }
-    });
-
     if (released) {
         applyPose(Player.poses.release);
+        poseUntil = now + poseHold.release;
+        return;
     }
 
-}
+    // neither: only go back to default once the current pose has had its time
+    if (now > poseUntil) {
+        applyPose(Player.poses.default);
+    }
+};
 
 const init = async () => {
 

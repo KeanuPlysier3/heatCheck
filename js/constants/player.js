@@ -38,8 +38,7 @@ Player.shoulderX = Player.torsoWidth / 2 + Player.armRadius; // the arms hang ju
 Player.headY = Player.hipY + Player.torsoHeight + Player.neckGap + Player.headRadius; // centre of the head
 Player.height = Player.headY + Player.headRadius; // top of the head: 1.8
 
-// the arm poses, made by hand with the arm test sliders. every value is a rotation in degrees,
-// 0 = the arm hanging straight down. x swings forward/back, z swings sideways.
+
 Player.poses = {
     // the ball held in front of the chest, before the shot
     loaded: {
@@ -50,5 +49,10 @@ Player.poses = {
     release: {
         left: { shoulderX: -115, shoulderZ: 0, elbowX: -75, elbowZ: -25 },
         right: { shoulderX: -130, shoulderZ: 15, elbowX: 0, elbowZ: 0 },
+    },
+
+    default: {
+        left: { shoulderX: 0, shoulderZ: 0, elbowX: 0, elbowZ: 0 },
+        right: { shoulderX: 0, shoulderZ: 0, elbowX: 0, elbowZ: 0 },
     },
 };

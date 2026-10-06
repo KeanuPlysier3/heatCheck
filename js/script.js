@@ -4,15 +4,56 @@ import { AxisGridHelper } from './classes/AxisGridHelper.js';
 import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'; // DEBUG ONLY, see the orbit camera block in init
 import { createCourt } from './objects/court';
+import { createPlayer } from './objects/player';
 import { createHoop } from './objects/hoop';
 import { Colors } from './constants/colors';
+import { Player } from './constants/player';
 
 let canvas;
 let renderer;
 let scene;
 let camera;
 let controls; // DEBUG ONLY: the orbit camera
+let joints; // the player's shoulder and elbow pivots, filled in init
 const gui = new GUI();
+
+// puts both of the player's arms in one of the poses from Player.poses
+const applyPose = (pose) => {
+    const toRadians = THREE.MathUtils.degToRad; // the poses are in degrees, rotations in radians
+    ['left', 'right'].forEach((side) => {
+        const { shoulder, elbow } = joints[side];
+        const values = pose[side];
+        shoulder.rotation.x = toRadians(values.shoulderX);
+        shoulder.rotation.z = toRadians(values.shoulderZ);
+        elbow.rotation.x = toRadians(values.elbowX);
+        elbow.rotation.z = toRadians(values.elbowZ);
+    });
+};
+
+// called by the motion detection every frame, with the two measured arms: [left, right]
+const handlePose = (arms) =>{
+  
+    let released = false;
+    // check if both arms are loaded
+    const loaded = arms.every((arm) => arm?.loaded);  
+
+    if (loaded) {
+        applyPose(Player.poses.loaded);
+        return;
+    }
+
+
+    arms.forEach((arm) => {
+        if (arm?.released) {
+            released = true;
+        }
+    });
+
+    if (released) {
+        applyPose(Player.poses.release);
+    }
+
+}
 
 const init = async () => {
 
@@ -78,7 +119,14 @@ const init = async () => {
     scene.add(court);
     makeAxisGrid(court, 'court', 15);
 
-    motionDetection(); // start the motion detection and shot counting
+
+    const player = createPlayer();
+    joints = player.joints; 
+    scene.add(player.player);
+    makeAxisGrid(player.player, 'player', 1);
+
+
+    motionDetection(handlePose); // start the motion detection and shot counting, handlePose gets the arms every frame
 
 
 }
@@ -99,6 +147,9 @@ function makeAxisGrid(node, label, units) {
     const helper = new AxisGridHelper(node, units);
     gui.add(helper, 'visible').name(label); // a checkbox bound to helper.visible, shown with this label
 }
+
+
+
 
 
 const render = (time) => {

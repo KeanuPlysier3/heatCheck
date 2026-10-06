@@ -12,6 +12,8 @@ export const Colors = {
     net: 0xFFF1D0, // cream
     outline: 0x1B1030, // very dark purple
     accent: 0xB6F500, // lime green, for UI and details (not used yet)
+    player: 0xFF3D8B, // hot pink, for the player's head (not used yet)
+  // teal, for the player's torso (not used yet)
 };
 
 // previous palette, to go back swap these values in above (`court` was called `wood`):

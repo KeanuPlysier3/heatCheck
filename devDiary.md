@@ -677,3 +677,263 @@ working without a webcam.
 **Next for this code:** the detection (`measureArm`, `angleAt`, `updateShot` and the `shot` settings)
 moves into the game as `js/input/motion.js`, where a recognised shot calls the game's `shotReleased(time)`.
 The `spike/` folder can be deleted after that; it is not part of the build.
+
+## 2026-10-06: player constants
+
+**What changed:** new `js/constants/player.js`, exporting a `Player` object with the character's sizes:
+feet, legs, torso, head, arms, and the number of segments for the round parts. Below the object, five
+values are calculated from those sizes: `hipY`, `shoulderY`, `shoulderX`, `headY` and `height`.
+
+**Why:** the player is the next object to build, and it follows the same rule as the court and the hoop:
+sizes are stated once in the constants, and the object file reads them. The player's sizes will be needed
+in more than one place: `createPlayer()` builds the body from them, the ball has to start at hand height,
+and the shot's launch point is at the hands above the head.
+
+**How it works:**
+
+- Everything is in metres, and the character's origin is on the floor between the feet, so placing the
+  player at `y = 0` stands it on the court. That matches the hoop, whose origin is the point on the floor
+  under the rim.
+- The body is stacked from the floor up, and the derived values are the heights where one part ends and the
+  next begins:
+
+  | Value | Calculation | Result |
+  | --- | --- | --- |
+  | `hipY` | `footHeight + legLength` | 0.88 |
+  | `shoulderY` | `hipY + torsoHeight - shoulderDrop` | 1.40 |
+  | `headY` (centre of the head) | `hipY + torsoHeight + neckGap + headRadius` | 1.64 |
+  | `height` (top of the head) | `headY + headRadius` | 1.80 |
+  | `shoulderX` | `torsoWidth / 2 + armRadius` | 0.27 |
+
+- They are calculated after the object, not inside it, for the same reason as `Court.Hoop.rimZ`: an object
+  cannot read its own values while it is still being written.
+- Capsule lengths (`legLength`, `upperArmLength`, `forearmLength`) are the full length including the
+  rounded ends. three.js's `CapsuleGeometry(radius, length)` wants only the straight middle part, so the
+  geometry will be made with `length - radius * 2`.
+- `shoulderY` and `shoulderX` are where the shoulder pivots will go, and `upperArmLength` is the distance
+  from there to the elbow pivot.
+- `radialSegments: 8` and `capSegments: 2` keep the round parts low-poly, for the faceted cartoon look.
+- Nothing uses the file yet, so the scene is unchanged.
+
+## 2026-10-06: player now reads its sizes from the constants correctly
+
+**What changed:** `js/objects/player.js` (the first version of `createPlayer()`, written by hand).
+
+- Every size was read from `player`, the lowercase `Object3D` container. They are now read from `Player`,
+  the constants object with a capital.
+- Names that did not exist in the constants were replaced with the ones that do:
+
+  | Was | Now |
+  | --- | --- |
+  | `headHeight` | `Player.headY` |
+  | `legWidth`, `legDepth` | `Player.legRadius * 2`, kept in a local `legWidth` |
+  | `legHeight` | `Player.legLength` |
+  | `shoulderHeight` | `Player.shoulderY` |
+  | `upperArmWidth` / `Depth`, `lowerArmWidth` / `Depth` | `Player.armRadius * 2`, kept in a local `armWidth` |
+  | `upperArmHeight` | `Player.upperArmLength` |
+  | `lowerArmHeight` | `Player.forearmLength` |
+  | the x positions built from `shoulderWidth` | `Player.shoulderX` and `-Player.shoulderX` |
+
+- The positions and the structure were left as they were. Only the lookups changed.
+
+**Why:** the player did not appear, and no error was shown.
+
+**How it works:**
+
+- `player` and `Player` are two different things. `player` is the empty `Object3D` that holds the body
+  parts; it has `position`, `rotation` and `add()`. `Player` is the object exported from
+  `constants/player.js`; it has the sizes.
+- Reading a property that an object does not have gives `undefined`, not an error. So
+  `player.headRadius` was `undefined`, and a geometry built from `undefined` sizes ends up with `NaN`
+  ("not a number") for its vertices. A shape without valid coordinates draws nothing.
+- The constants give legs and arms a radius, because they were sized as capsules. A box needs a full width,
+  which is twice the radius.
+- Known and left for later: the positions are not right yet. The torso and legs are placed around y = 0, so
+  the legs hang below the floor, the arms point up from the shoulder height, and there is one shoulder
+  object that ends up at the second position, with all four arm boxes in it.
+
+## 2026-10-06: player positions fixed, two arms with shoulder and elbow pivots
+
+**What changed:** `js/objects/player.js`.
+
+- **Torso:** y is now `Player.hipY + Player.torsoHeight / 2`. It was `Player.torsoHeight / 2`.
+- **Legs:** x is `±Player.legSpacing`, y is `Player.hipY - Player.legLength / 2`. They were at the torso's
+  edges and at `-Player.legLength / 2`, below the floor.
+- **Feet:** new, one box per leg, on the floor.
+- **Arms:** each side now gets its own `shoulder` pivot at `(±Player.shoulderX, Player.shoulderY, 0)`,
+  with the upper arm hanging below it, an `elbow` pivot at the bottom of the upper arm, and the lower arm
+  hanging below the elbow. Before, there was one shoulder object for both sides and all four arm boxes were
+  placed above shoulder height.
+- The function body is indented, and each part has a comment saying where it is measured from.
+
+**Why:** the parts appeared but in the wrong places: half the body under the floor, the arms pointing up,
+and both arms attached to one shoulder that ended up on one side.
+
+**How it works:**
+
+- Everything is positioned from the player's origin, the point on the floor between the feet, stacking
+  upward with the heights from the constants:
+
+  | Part | From y | To y | Centre y (what `position.y` is set to) |
+  | --- | --- | --- | --- |
+  | foot | 0 | 0.08 | `footHeight / 2` |
+  | leg | 0.08 | 0.88 | `hipY - legLength / 2` |
+  | torso | 0.88 | 1.46 | `hipY + torsoHeight / 2` |
+  | head | 1.48 | 1.80 | `headY` |
+
+  A box and a sphere are positioned by their centre, so each one sits half its size above the height where
+  it starts, or half its size below the height where it ends.
+- **Feet:** `z = (footLength - legWidth) / 2` puts the heel under the back of the leg and lets the rest of
+  the foot stick out forward. Forward is +z, the direction of the hoop.
+- **Arms:** the old code changed one shoulder object's position twice in a loop, so it kept only the last
+  value. Now the loop creates a new shoulder on each pass, one per side.
+  - The shoulder is an empty `Object3D` at the joint. The upper arm is its child at
+    `y = -upperArmLength / 2`, so the arm's top end is exactly at the joint and the arm hangs down.
+  - The elbow is another empty `Object3D`, a child of the shoulder at `y = -upperArmLength`, the bottom of
+    the upper arm. The lower arm is its child at `y = -forearmLength / 2`.
+  - The arm positions are small numbers because they are measured from their parent, not from the floor:
+    three.js adds the levels together (player, shoulder, elbow, arm).
+  - Rotating a shoulder swings the whole arm from the shoulder; rotating an elbow bends only the lower arm.
+    Nothing rotates them yet, so the arms hang straight down.
+- The elbow pivots were not asked for separately. They are in because the lower arm needs a parent to hang
+  from, and placing it under an elbow now avoids re-parenting it when the arms have to bend.
+- `createPlayer()` still returns only the `player` container, so `script.js` did not change. The shoulders
+  and elbows are not handed out yet; that comes when something has to pose the arms.
+
+## 2026-10-06: outlines on the player
+
+**What changed:** `js/objects/player.js`.
+
+- Two imports: `Outline` from the constants and `createOutlineMesh` from the helper.
+- Every body part gets an outline shell, added as a child of that part's mesh and named after it:
+
+  | Part | Outline geometry | Outline mesh |
+  | --- | --- | --- |
+  | head | `headOutlineGeometry` | `headOutlineMesh` |
+  | torso | `torsoOutlineGeometry` | `torsoOutlineMesh` |
+  | leg (each) | `legOutlineGeometry` | `legOutlineMesh` |
+  | foot (each) | `footOutlineGeometry` | `footOutlineMesh` |
+  | upper arm (each) | `upperArmOutlineGeometry` | `upperArmOutlineMesh` |
+  | lower arm (each) | `lowerArmOutlineGeometry` | `lowerArmOutlineMesh` |
+
+**Why:** the art direction gives every object a dark cartoon outline. Without it the player looked
+unfinished next to the hoop, and because every part has the same colour, the outline is also what makes the
+head, arms and legs readable as separate shapes.
+
+**How it works:**
+
+- It is the same technique as on the hoop. For each part a second geometry is made in the same shape,
+  `Outline.thickness` bigger on every side: a box gets `+ Outline.thickness * 2` on each of its three sizes
+  (once per opposite side), and the head's sphere gets `+ Outline.thickness` on its radius.
+- `createOutlineMesh` gives that geometry a dark material that only draws the inside walls
+  (`side: THREE.BackSide`). The half of the shell in front of the part is invisible, and the half behind it
+  shows as a dark edge around the part's silhouette.
+- Each shell is a child of its own part, so it needs no position: it sits exactly around the part. For the
+  arms that matters most. The upper arm's shell follows the shoulder pivot and the lower arm's shell follows
+  the elbow pivot, so the outlines will bend with the arms.
+- The legs, feet and arms are made inside loops that run once per side, so each side gets its own shell
+  from the same lines of code.
+- Where two parts touch (legs under the torso, upper arm against lower arm), each shell is partly inside
+  its neighbour and hidden there, so there is no line at the joint. The outline appears where a part's edge
+  has something else behind it.
+- The thickness and the on/off switch are the shared ones in `constants/outline.js`, so the player's
+  outlines change together with the hoop's and the court's.
+
+## 2026-10-06: player hands out its joints, and a debug arm test
+
+**What changed:**
+
+- `js/objects/player.js`:
+  - `createPlayer()` collects the shoulder and elbow pivots in a `joints` object
+    (`joints.left.shoulder`, `joints.left.elbow`, and the same for `right`) and returns
+    `{ player, joints }`. It used to return only the `player` container.
+  - Which side is which was swapped: the pivot on the +x side is now stored as `left`, the one on the -x
+    side as `right`.
+- `js/script.js`:
+  - reads both from the result (`player.player` for the container, `player.joints` for the pivots);
+  - new function `makeArmTest(joints)`, marked `DEBUG ONLY`, called once in `init`. It adds two folders to
+    the lil-gui panel, "left arm (debug)" and "right arm (debug)", each with four sliders.
+
+**Why:**
+
+- The pivots were created inside a loop and then lost, so nothing outside `createPlayer()` could turn
+  them. Mirroring the webcam's arm movement, and later a shooting animation, both need to reach them.
+- Testing by hand comes before connecting the webcam. If an arm moves wrongly with the webcam attached,
+  the cause could be the character or the angle mapping. Sliders settle the first one on their own.
+- The sides were swapped because left and right are from the player's point of view. The player faces +z,
+  towards the hoop. A camera looking down -z has +x on its right; turn around to face +z and +x is on the
+  left.
+
+**How it works:**
+
+- Returning an object with two things in it is the pattern the Aviator's `createSea()` uses
+  (`{ mesh, animate }`).
+- `gui.addFolder(name)` makes a collapsible group in the debug panel. Each `folder.add(object, property,
+  min, max, step)` makes a slider bound to a number on an object.
+- lil-gui reads and writes a property on an object, so each arm has a small `pose` object holding the four
+  slider values in degrees. `.onChange(...)` runs every time a slider moves, and copies the value to the
+  pivot's rotation, converted with `THREE.MathUtils.degToRad` because three.js rotations are in radians.
+- Each pivot gets two sliders, for two different axes:
+  - `rotation.x` turns around the left-right axis, so the arm swings forward and back;
+  - `rotation.z` turns around the front-back axis, so the arm swings out to the side and up. This is the
+    plane the webcam sees, so it is the axis the mirroring will use.
+- At 0 on every slider the arms hang straight down, which is how they are built.
+- The shoulder sliders turn the shoulder pivot, which carries the upper arm, the elbow pivot and the lower
+  arm. The elbow sliders turn only the elbow pivot, which carries only the lower arm.
+- Nothing in the game reads the sliders. To remove the test, delete `makeArmTest` and its call.
+
+## 2026-10-06: the webcam switches the player between a loaded and a release pose
+
+**What changed:**
+
+- `js/constants/player.js`: new `Player.poses`, with two poses, `loaded` and `release`. Each has, for the
+  left and the right arm, four rotations in degrees: `shoulderX`, `shoulderZ`, `elbowX`, `elbowZ`. The
+  values were set by hand with the arm test sliders:
+
+  | Pose | Arm | shoulder x | shoulder z | elbow x | elbow z |
+  | --- | --- | --- | --- | --- | --- |
+  | loaded | left | -30 | 0 | -50 | -10 |
+  | loaded | right | -50 | 25 | -50 | 0 |
+  | release | left | -115 | 0 | -75 | -25 |
+  | release | right | -130 | 15 | 0 | 0 |
+
+- `js/motionDetection.js`: `motionDetection` takes a function as its parameter and stores it in `onPose`.
+  In `detect`, after both arms are measured, it calls `onPose([left, right])`.
+- `js/script.js`:
+  - `joints` is now a variable at the top of the file, filled in `init`. It was a local `const` inside
+    `init`.
+  - new function `applyPose(pose)`, which sets the four rotations on both arms.
+  - `handlePose` (written by hand earlier) calls `applyPose` where it used to `console.log`: the loaded
+    pose when both arms are loaded, the release pose when at least one arm is released.
+  - `motionDetection(handlePose)`: the handler is passed in.
+  - imports `Player`.
+
+**Why:** this is the first connection between the webcam and the character. The webcam only sees a flat
+picture, so real arm positions cannot be copied into 3D. Instead the two key moments of a shot were posed
+by hand in full 3D, and the webcam decides which one to show. There is no blending between the poses yet;
+the arms jump from one to the other. Smoothing is the next step.
+
+**How it works:**
+
+- **Getting data out of the motion file.** The detection never ends and produces new measurements every
+  frame, so it cannot `return` them. `script.js` hands in a function instead (a callback), the motion file
+  keeps it in `onPose`, and calls it each frame with the two arms in an array. `if (onPose)` means the
+  motion code still works when no function is passed. The function is written in `script.js`, so it can
+  reach `joints`; the motion file knows nothing about the player.
+- **`joints` moved to the top of the file** because `handlePose` and `applyPose` are defined outside
+  `init` and need to reach it. A `const` inside `init` only exists inside `init`.
+- **`handlePose(arms)`** receives `[left, right]`. An arm is `null` when the model cannot see it well
+  enough, so `arm?.loaded` is used: it reads `.loaded` only if there is an arm.
+  - `arms.every((arm) => arm?.loaded)` is true only when both arms are loaded.
+  - the loop sets `released` when at least one arm is released.
+  - when neither is the case, nothing is changed, so the arms stay in the last pose they were given.
+- **`applyPose(pose)`** goes through `'left'` and `'right'`, takes that side's pivots from `joints` and
+  that side's values from the pose, and writes them to `rotation.x` and `rotation.z` of the shoulder and
+  the elbow, converted from degrees to radians.
+- **The left and right values differ** because the two arms do different jobs in a shot: the right arm is
+  the shooting arm and ends up straight (elbow 0), while the left is the guide hand and stays bent. Their
+  z values also have opposite meaning, since the arms mirror each other.
+- The poses are in the constants, not in `script.js`, because they are data to tune, and the smoothing
+  step will read the same values.
+- The arm test sliders still work, but they do not move when a pose is applied, and the next pose from the
+  webcam overwrites what a slider set.

@@ -13,6 +13,7 @@ export const Colors = {
     outline: 0x1B1030, // very dark purple
     accent: 0xB6F500, // lime green, for UI and details (not used yet)
     player: 0xFF3D8B, // hot pink, for the player's head (not used yet)
+  basketball: 0xFF5F1F,
   // teal, for the player's torso (not used yet)
 };
 

@@ -1,38 +1,104 @@
 import * as THREE from 'three/webgpu';
+import RAPIER from '@dimforge/rapier3d-compat';
 import { motionDetection } from './motionDetection.js';
 import { AxisGridHelper } from './classes/AxisGridHelper.js';
 import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'; // DEBUG ONLY, see the orbit camera block in init
 import { createCourt } from './objects/court';
 import { createPlayer } from './objects/player';
+import { Court } from './constants/court';
 import { createHoop } from './objects/hoop';
 import { Colors } from './constants/colors';
 import { Player } from './constants/player';
+import { createBasketball } from './objects/basketball';
+import {createPhysics} from './physics.js';
 
 let canvas;
 let renderer;
 let scene;
 let camera;
+let basketball; // the basketball mesh, used to update its position every frame
 let controls; // DEBUG ONLY: the orbit camera
 let joints; // the player's shoulder and elbow pivots, filled in init
+let playerMesh; // the player's y position, used for jumping
+let world, ballBody;
+
+
+let ballState ="held"; //held or flying
+
 const gui = new GUI();
 
+let jumping = false
+let jumpVelocity = 0;
 
-const applyPose = (pose) => {
-    const toRadians = THREE.MathUtils.degToRad; // the poses are in degrees, rotations in radians
+let targetPose = Player.poses.default;
+
+const updateArms = () => {
+    const toRadians = THREE.MathUtils.degToRad;
     ['left', 'right'].forEach((side) => {
         const { shoulder, elbow } = joints[side];
-        const values = pose[side];
-        shoulder.rotation.x = toRadians(values.shoulderX);
-        shoulder.rotation.z = toRadians(values.shoulderZ);
-        elbow.rotation.x = toRadians(values.elbowX);
-        elbow.rotation.z = toRadians(values.elbowZ);
+        const t = targetPose[side];
+        shoulder.rotation.x = lerp(shoulder.rotation.x, toRadians(t.shoulderX));
+        shoulder.rotation.z = lerp(shoulder.rotation.z, toRadians(t.shoulderZ));
+        elbow.rotation.x = lerp(elbow.rotation.x, toRadians(t.elbowX));
+        elbow.rotation.z = lerp(elbow.rotation.z, toRadians(t.elbowZ));
     });
 };
 
+
+const shoot = () =>{
+    if (ballState !== 'held') return; //avoid shooting if the ball is already flying
+    ballState = "flying"; 
+    ballBody.setBodyType(RAPIER.RigidBodyType.Dynamic, true); // make the ball dynamic so it can be affected by physics
+
+
+    const start = ballBody.translation();
+    const rim = { x: 0, y: Court.Hoop.rimHeight, z: Court.Hoop.rimZ };
+    const gravity = 9.81;
+    const deltaTime = 1/60; // 60fps, the time between frames -> needed for perfect shot.
+
+
+    const distanceX = rim.x - start.x;
+    const distanceY = rim.y - start.y;
+    const distanceZ = rim.z - start.z;
+    
+    const horizontal = Math.hypot(distanceX, distanceZ);   // flat distance from the hand to the rim
+    const entryAngle = THREE.MathUtils.degToRad(60);       // how steeply the ball drops into the rim
+    const time = Math.sqrt(2 * (horizontal * Math.tan(entryAngle) + distanceY) / gravity);
+
+    const velocityX = distanceX / time;
+    const velocityZ = distanceZ / time;
+    
+    const velocityY = (distanceY + 0.5 * gravity * time * time) / time + 0.5 * gravity * deltaTime; //formula for vertical motion under gravity ½.g.t²
+
+    ballBody.setLinvel({ x: velocityX, y: velocityY, z: velocityZ }, true); //linear velocity
+    ballBody.setAngvel({ x: 0, y: 0, z: 0 }, true)// angular velocity (backspin)
+
+    setTimeout(() => {
+        ballState = "held"; 
+        ballBody.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased, true); 
+    }, 3000); // 3seconds later, reset the ball to be held again
+}
+
+
+const startJump = () => { if (!jumping) { jumping = true; jumpVelocity = 0.12; } };
+const updateJump = () => {
+    if (!jumping) return;
+    playerMesh.position.y += jumpVelocity;
+    jumpVelocity -= 0.008;               // gravity
+    if (playerMesh.position.y <= 0) { playerMesh.position.y = 0; jumping = false; }
+};
+
+
+const lerp = (currentValue, targetValue) => {
+    currentValue += (targetValue - currentValue) * 0.2;
+    return currentValue;
+}
+
 const poseHold = {
-    loaded: 1500,   
-    release: 800,   
+    default: 300,
+    loaded: 300,
+    release: 300,
 };
 let poseUntil = 0; // the current pose is kept until this time
 
@@ -40,23 +106,46 @@ const handlePose = (arms) => {
     const now = performance.now();
     const loaded = arms.every((arm) => arm?.loaded);
     const released = arms.some((arm) => arm?.released);
+    const def = arms.every((arm) => arm?.default);
+    const rising = arms.some((arm) => arm?.handHigh);
+
+
+    if (def) {
+        targetPose = Player.poses.default;
+        poseUntil = now + poseHold.default;
+        
+        return;
+    }
 
     if (loaded) {
-        applyPose(Player.poses.loaded);
+        targetPose = Player.poses.loaded;
         poseUntil = now + poseHold.loaded;      // restart the clock on every loaded frame
         return;
     }
 
-    if (released) {
-        applyPose(Player.poses.release);
+    if (rising && targetPose === Player.poses.loaded) {
+        targetPose = Player.poses.release;   // start the swing early instead of waiting for a full release
         poseUntil = now + poseHold.release;
+        startJump(); // jump when the arms are rising
         return;
     }
 
-    // neither: only go back to default once the current pose has had its time
-    if (now > poseUntil) {
-        applyPose(Player.poses.default);
+    if (released) {
+        targetPose = Player.poses.release;
+        poseUntil = now + poseHold.release;
+
+        shoot(); // call the shoot function when the ball is released
+        return;
     }
+
+    //safety net for when arms are lost
+    if (now > poseUntil + 2000) {
+        targetPose = Player.poses.default;
+    }
+};
+
+const handPoint = (side) => {
+    return joints[side].elbow.localToWorld(new THREE.Vector3(0.15, -Player.forearmLength, 0.15));
 };
 
 const init = async () => {
@@ -76,11 +165,9 @@ const init = async () => {
     const near = 0.1;
     const far = 100;
     camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
-    camera.position.set(0, 9, -7); 
-  
-    camera.lookAt(0, 0, 0);
+    camera.position.set(0, 9, -7);
 
-    // DEBUG ONLY: orbit camera
+    camera.lookAt(0, 0, 0);
 
     controls = new OrbitControls(camera, renderer.domElement); // moves `camera`, listens for mouse input on the canvas
     controls.enableDamping = true; // the movement glides to a stop instead of stopping dead
@@ -125,9 +212,16 @@ const init = async () => {
 
 
     const player = createPlayer();
-    joints = player.joints; 
+    playerMesh = player.player; // the player's y position, used for jumping
+    joints = player.joints;
     scene.add(player.player);
     makeAxisGrid(player.player, 'player', 1);
+
+    basketball = createBasketball();
+    scene.add(basketball);
+    makeAxisGrid(basketball, 'basketball', 1);
+
+    ({ world, ballBody } = createPhysics());
 
 
     motionDetection(handlePose); // start the motion detection and shot counting, handlePose gets the arms every frame
@@ -168,6 +262,20 @@ const render = (time) => {
     controls.update(); // DEBUG ONLY: needed every frame for the orbit camera's damping
 
     renderer.render(scene, camera);
+    updateArms(); // update the player's arm rotations based on the target pose
+
+    if (ballState === 'held') {
+        const h = handPoint('right');                     
+        ballBody.setNextKinematicTranslation(h);           // physics follows the hand
+    }
+    updateJump(); // update the player's jump position based on the jump velocity    
+
+    world.step();
+
+    const p = ballBody.translation();
+    basketball.position.set(p.x, p.y, p.z);
+   
+    // update all the line segments in the scene, so the outlines follow their objects
 }
 
 

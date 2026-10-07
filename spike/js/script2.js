@@ -60,9 +60,8 @@ const init = async () => {
     console.log("Detector initialized:", detector);
 
     detect();
-
-
 };
+
 
 async function getMedia(constraints) {
     let stream = null;

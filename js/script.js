@@ -1,14 +1,17 @@
 import * as THREE from 'three/webgpu';
+import RAPIER from '@dimforge/rapier3d-compat';
 import { motionDetection } from './motionDetection.js';
 import { AxisGridHelper } from './classes/AxisGridHelper.js';
 import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'; // DEBUG ONLY, see the orbit camera block in init
 import { createCourt } from './objects/court';
 import { createPlayer } from './objects/player';
+import { Court } from './constants/court';
 import { createHoop } from './objects/hoop';
 import { Colors } from './constants/colors';
 import { Player } from './constants/player';
 import { createBasketball } from './objects/basketball';
+import {createPhysics} from './physics.js';
 
 let canvas;
 let renderer;
@@ -18,7 +21,10 @@ let basketball; // the basketball mesh, used to update its position every frame
 let controls; // DEBUG ONLY: the orbit camera
 let joints; // the player's shoulder and elbow pivots, filled in init
 let playerMesh; // the player's y position, used for jumping
+let world, ballBody;
 
+
+let ballState ="held"; //held or flying
 
 const gui = new GUI();
 
@@ -39,6 +45,40 @@ const updateArms = () => {
     });
 };
 
+
+const shoot = () =>{
+    if (ballState !== 'held') return; //avoid shooting if the ball is already flying
+    ballState = "flying"; 
+    ballBody.setBodyType(RAPIER.RigidBodyType.Dynamic, true); // make the ball dynamic so it can be affected by physics
+
+
+    const start = ballBody.translation();
+    const rim = { x: 0, y: Court.Hoop.rimHeight, z: Court.Hoop.rimZ };
+    const gravity = 9.81;
+    const deltaTime = 1/60; // 60fps, the time between frames -> needed for perfect shot.
+
+
+    const distanceX = rim.x - start.x;
+    const distanceY = rim.y - start.y;
+    const distanceZ = rim.z - start.z;
+    
+    const horizontal = Math.hypot(distanceX, distanceZ);   // flat distance from the hand to the rim
+    const entryAngle = THREE.MathUtils.degToRad(60);       // how steeply the ball drops into the rim
+    const time = Math.sqrt(2 * (horizontal * Math.tan(entryAngle) + distanceY) / gravity);
+
+    const velocityX = distanceX / time;
+    const velocityZ = distanceZ / time;
+    
+    const velocityY = (distanceY + 0.5 * gravity * time * time) / time + 0.5 * gravity * deltaTime; //formula for vertical motion under gravity ½.g.t²
+
+    ballBody.setLinvel({ x: velocityX, y: velocityY, z: velocityZ }, true); //linear velocity
+    ballBody.setAngvel({ x: 0, y: 0, z: 0 }, true)// angular velocity (backspin)
+
+    setTimeout(() => {
+        ballState = "held"; 
+        ballBody.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased, true); 
+    }, 3000); // 3seconds later, reset the ball to be held again
+}
 
 
 const startJump = () => { if (!jumping) { jumping = true; jumpVelocity = 0.12; } };
@@ -73,6 +113,7 @@ const handlePose = (arms) => {
     if (def) {
         targetPose = Player.poses.default;
         poseUntil = now + poseHold.default;
+        
         return;
     }
 
@@ -92,6 +133,8 @@ const handlePose = (arms) => {
     if (released) {
         targetPose = Player.poses.release;
         poseUntil = now + poseHold.release;
+
+        shoot(); // call the shoot function when the ball is released
         return;
     }
 
@@ -125,8 +168,6 @@ const init = async () => {
     camera.position.set(0, 9, -7);
 
     camera.lookAt(0, 0, 0);
-
-    // DEBUG ONLY: orbit camera
 
     controls = new OrbitControls(camera, renderer.domElement); // moves `camera`, listens for mouse input on the canvas
     controls.enableDamping = true; // the movement glides to a stop instead of stopping dead
@@ -180,6 +221,8 @@ const init = async () => {
     scene.add(basketball);
     makeAxisGrid(basketball, 'basketball', 1);
 
+    ({ world, ballBody } = createPhysics());
+
 
     motionDetection(handlePose); // start the motion detection and shot counting, handlePose gets the arms every frame
 
@@ -220,8 +263,19 @@ const render = (time) => {
 
     renderer.render(scene, camera);
     updateArms(); // update the player's arm rotations based on the target pose
-    basketball.position.copy(handPoint('right'));
+
+    if (ballState === 'held') {
+        const h = handPoint('right');                     
+        ballBody.setNextKinematicTranslation(h);           // physics follows the hand
+    }
     updateJump(); // update the player's jump position based on the jump velocity    
+
+    world.step();
+
+    const p = ballBody.translation();
+    basketball.position.set(p.x, p.y, p.z);
+   
+    // update all the line segments in the scene, so the outlines follow their objects
 }
 
 

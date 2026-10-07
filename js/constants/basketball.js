@@ -10,7 +10,7 @@ export const Basketball = {
     // physics material. these are tuned by feel from the real world values, not measured
     restitution: 0.8, // bounciness. official test: dropped from 1.8 m it must come back up to 1.2 - 1.4 m
     friction: 0.6, // rubber grips the floor and the rim
-    linearDamping: 0.05, // a little air drag so it does not fly forever
+    linearDamping: 0.01, // a little air drag so it does not fly forever
     angularDamping: 0.3, // slows the spin down
 };
 

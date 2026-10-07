@@ -18,6 +18,7 @@ const minScore = 0.2; //min certainity
 const shot = {
     loadedMaxAngle: 110, // elbow bent at least this far (smaller angle = more bent) counts as loaded
     releaseMinAngle: 160, // elbow opened past this counts as a release
+    defaultMinAngle: 160, //arms down 
     loadTimeout: 1500, 
     cooldown: 1000, 
 };
@@ -143,12 +144,18 @@ const measureArm = (pose, side) => {
 
     const elbowAngle = angleAt(shoulder, elbow, wrist);
     const wristAboveHead = wrist.y < nose.y;
-    const handLow = wrist.y > shoulder.y;
+    const handMid = wrist.y > shoulder.y; // wrist below the shoulder, used for loaded
+    const forearm = Math.hypot(wrist.x - elbow.x, wrist.y - elbow.y);
+    const handLow = wrist.y > elbow.y + forearm * 0.3; // wrist clearly below the elbow
+    const upperArm = Math.hypot(elbow.x - shoulder.x, elbow.y - shoulder.y);
+    const handHigh = wrist.y < shoulder.y - upperArm * 0.25; // wrist clearly above the shoulder
+
 
     return {
-        shoulder, elbow, wrist, elbowAngle, wristAboveHead, handLow,
-        loaded: handLow && elbowAngle < shot.loadedMaxAngle, // elbow bent enough and hand low enough to count as loaded
+        shoulder, elbow, wrist, elbowAngle, wristAboveHead, handMid, handLow, handHigh,
+        loaded: handMid && elbowAngle < shot.loadedMaxAngle, // elbow bent enough and hand low enough to count as loaded
         released: wristAboveHead && elbowAngle > shot.releaseMinAngle, // elbow opened enough and hand high enough to count as released
+        default: handLow && elbowAngle >= shot.defaultMinAngle, //arms down
     };
 };
 

@@ -17,22 +17,29 @@ let controls; // DEBUG ONLY: the orbit camera
 let joints; // the player's shoulder and elbow pivots, filled in init
 const gui = new GUI();
 
+let targetPose = Player.poses.default;
 
-const applyPose = (pose) => {
-    const toRadians = THREE.MathUtils.degToRad; // the poses are in degrees, rotations in radians
+const updateArms = () => {
+    const toRadians = THREE.MathUtils.degToRad;
     ['left', 'right'].forEach((side) => {
         const { shoulder, elbow } = joints[side];
-        const values = pose[side];
-        shoulder.rotation.x = toRadians(values.shoulderX);
-        shoulder.rotation.z = toRadians(values.shoulderZ);
-        elbow.rotation.x = toRadians(values.elbowX);
-        elbow.rotation.z = toRadians(values.elbowZ);
+        const t = targetPose[side];
+        shoulder.rotation.x = lerp(shoulder.rotation.x, toRadians(t.shoulderX));
+        shoulder.rotation.z = lerp(shoulder.rotation.z, toRadians(t.shoulderZ));
+        elbow.rotation.x = lerp(elbow.rotation.x, toRadians(t.elbowX));
+        elbow.rotation.z = lerp(elbow.rotation.z, toRadians(t.elbowZ));
     });
 };
 
+const lerp = (currentValue, targetValue) =>{
+    currentValue += (targetValue - currentValue) * 0.2;
+    return currentValue;
+}
+
 const poseHold = {
-    loaded: 1500,   
-    release: 800,   
+    default: 300,
+    loaded: 300,   
+    release: 300,   
 };
 let poseUntil = 0; // the current pose is kept until this time
 
@@ -40,22 +47,37 @@ const handlePose = (arms) => {
     const now = performance.now();
     const loaded = arms.every((arm) => arm?.loaded);
     const released = arms.some((arm) => arm?.released);
+    const def = arms.every((arm) => arm?.default);
+    const rising = arms.some((arm) => arm?.handHigh);
+
+
+    if (def) {
+        targetPose = Player.poses.default;
+        poseUntil = now + poseHold.default;
+        return;
+    }
 
     if (loaded) {
-        applyPose(Player.poses.loaded);
+        targetPose = Player.poses.loaded;
         poseUntil = now + poseHold.loaded;      // restart the clock on every loaded frame
         return;
     }
 
-    if (released) {
-        applyPose(Player.poses.release);
+    if (rising && targetPose === Player.poses.loaded) {
+        targetPose = Player.poses.release;   // start the swing early instead of waiting for a full release
         poseUntil = now + poseHold.release;
         return;
     }
 
-    // neither: only go back to default once the current pose has had its time
-    if (now > poseUntil) {
-        applyPose(Player.poses.default);
+    if (released) {
+        targetPose = Player.poses.release;
+        poseUntil = now + poseHold.release;
+        return;
+    }
+
+//safety net for when arms are lost
+    if (now > poseUntil + 2000) {
+        targetPose = Player.poses.default;
     }
 };
 
@@ -168,6 +190,8 @@ const render = (time) => {
     controls.update(); // DEBUG ONLY: needed every frame for the orbit camera's damping
 
     renderer.render(scene, camera);
+    updateArms(); // update the player's arm rotations based on the target pose
+    
 }
 
 

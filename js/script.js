@@ -8,14 +8,18 @@ import { createPlayer } from './objects/player';
 import { createHoop } from './objects/hoop';
 import { Colors } from './constants/colors';
 import { Player } from './constants/player';
+import { createBasketball } from './objects/basketball';
 
 let canvas;
 let renderer;
 let scene;
 let camera;
+let basketball; // the basketball mesh, used to update its position every frame
 let controls; // DEBUG ONLY: the orbit camera
 let joints; // the player's shoulder and elbow pivots, filled in init
 let playerMesh; // the player's y position, used for jumping
+
+
 const gui = new GUI();
 
 let jumping = false
@@ -97,6 +101,10 @@ const handlePose = (arms) => {
     }
 };
 
+const handPoint = (side) => {
+    return joints[side].elbow.localToWorld(new THREE.Vector3(0.15, -Player.forearmLength, 0.15));
+};
+
 const init = async () => {
 
     canvas = document.querySelector('#c');
@@ -168,6 +176,10 @@ const init = async () => {
     scene.add(player.player);
     makeAxisGrid(player.player, 'player', 1);
 
+    basketball = createBasketball();
+    scene.add(basketball);
+    makeAxisGrid(basketball, 'basketball', 1);
+
 
     motionDetection(handlePose); // start the motion detection and shot counting, handlePose gets the arms every frame
 
@@ -208,6 +220,7 @@ const render = (time) => {
 
     renderer.render(scene, camera);
     updateArms(); // update the player's arm rotations based on the target pose
+    basketball.position.copy(handPoint('right'));
     updateJump(); // update the player's jump position based on the jump velocity    
 }
 

@@ -10,6 +10,7 @@ let detector = undefined;
 let video = undefined;
 let canvas = undefined;
 let ctx = undefined;
+let onPose = undefined; // the function to call every frame with the measured arms, handed in by script.js
 
 const minScore = 0.2; //min certainity
 
@@ -29,7 +30,9 @@ const shotState = {
     count: 0, 
 };
 
-export const motionDetection = async () => {
+export const motionDetection = async (poseCallback) => {
+    onPose = poseCallback;
+
     //the backend
     const success = await tf.setBackend('webgpu');
     await tf.ready();
@@ -88,6 +91,7 @@ const detect = async () => {
         const right = measureArm(poses[0], 'right');
         drawArm(left);
         drawArm(right);
+        if (onPose) onPose([left, right]); // an arm is null when it is not visible enough
 
         const now = performance.now(); // ms since the page loaded
         updateShot('left', left, now);

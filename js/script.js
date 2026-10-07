@@ -15,7 +15,11 @@ let scene;
 let camera;
 let controls; // DEBUG ONLY: the orbit camera
 let joints; // the player's shoulder and elbow pivots, filled in init
+let playerMesh; // the player's y position, used for jumping
 const gui = new GUI();
+
+let jumping = false
+let jumpVelocity = 0;
 
 let targetPose = Player.poses.default;
 
@@ -31,15 +35,26 @@ const updateArms = () => {
     });
 };
 
-const lerp = (currentValue, targetValue) =>{
+
+
+const startJump = () => { if (!jumping) { jumping = true; jumpVelocity = 0.12; } };
+const updateJump = () => {
+    if (!jumping) return;
+    playerMesh.position.y += jumpVelocity;
+    jumpVelocity -= 0.008;               // gravity
+    if (playerMesh.position.y <= 0) { playerMesh.position.y = 0; jumping = false; }
+};
+
+
+const lerp = (currentValue, targetValue) => {
     currentValue += (targetValue - currentValue) * 0.2;
     return currentValue;
 }
 
 const poseHold = {
     default: 300,
-    loaded: 300,   
-    release: 300,   
+    loaded: 300,
+    release: 300,
 };
 let poseUntil = 0; // the current pose is kept until this time
 
@@ -66,6 +81,7 @@ const handlePose = (arms) => {
     if (rising && targetPose === Player.poses.loaded) {
         targetPose = Player.poses.release;   // start the swing early instead of waiting for a full release
         poseUntil = now + poseHold.release;
+        startJump(); // jump when the arms are rising
         return;
     }
 
@@ -75,7 +91,7 @@ const handlePose = (arms) => {
         return;
     }
 
-//safety net for when arms are lost
+    //safety net for when arms are lost
     if (now > poseUntil + 2000) {
         targetPose = Player.poses.default;
     }
@@ -98,8 +114,8 @@ const init = async () => {
     const near = 0.1;
     const far = 100;
     camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
-    camera.position.set(0, 9, -7); 
-  
+    camera.position.set(0, 9, -7);
+
     camera.lookAt(0, 0, 0);
 
     // DEBUG ONLY: orbit camera
@@ -147,7 +163,8 @@ const init = async () => {
 
 
     const player = createPlayer();
-    joints = player.joints; 
+    playerMesh = player.player; // the player's y position, used for jumping
+    joints = player.joints;
     scene.add(player.player);
     makeAxisGrid(player.player, 'player', 1);
 
@@ -191,7 +208,7 @@ const render = (time) => {
 
     renderer.render(scene, camera);
     updateArms(); // update the player's arm rotations based on the target pose
-    
+    updateJump(); // update the player's jump position based on the jump velocity    
 }
 
 

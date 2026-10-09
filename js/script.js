@@ -32,6 +32,8 @@ const physicsStep = 1 / 60;   // seconds per physics step
 let lastTime = 0;
 let physicsTime = 0;    // real time that hasn't been simulated yet
 
+
+
 let meterValue = 0;       // 0 = empty, 1 = full
 let meterActive = false;  // true while a shot is being loaded
 let meterElement, meterFill, meterGreen; // the bar's elements, filled in init
@@ -46,13 +48,16 @@ let stats = {
     madeShots: 0,
     shootingPercentage: 0,
     streak: 0,
+    currentSpot: 0,
+    nextSpot: 3,
+    spotProgress: 0,
 };
 
 const swish = new Audio('soundEffects/swish1.mp3');
 swish.volume = 0.7; // set the volume to 70% of the original
 
-
-
+const greenGiant = new Audio('soundEffects/GreenGiant.mp3');
+greenGiant.volume = 0.7;
 
 let ballState = "held"; // held: in the hand. flying: a shot in the air. landing: shot decided, waiting for the floor. shrinking: on its way back
 let ballScale = 1;      // the ball's size on screen: 1 = full size, 0 = gone
@@ -161,6 +166,7 @@ const resetMeter = () => {
 
 const startMeter = () => {
     if (meterActive) return;   // already filling
+    if (ballState !== 'held') return;
     meterActive = true;
     meterValue = 0;
 };
@@ -181,6 +187,8 @@ const releaseMeter = () => {
         const howLate = (meterValue - greenTop) / (1 - greenTop);          // 0 at the green's edge, 1 at a full meter
         power = 1 + howLate * Meter.maxError;                              // late: more power, long
     } else {
+        greenGiant.currentTime = 0;
+        greenGiant.play();
         console.log('Perfect shot!');
     }
 
@@ -231,8 +239,9 @@ const shoot = (power = 1) => {
 
 // the shot is decided: let the ball land, shrink it away, and give it back to the player.
 // this only starts the sequence, updateBallReturn does the work frame by frame
-const shotReset = () => {
-    ballState = ballNearFloor() ? "shrinking" : "landing";
+const shotReset = (made) => {
+    const shrinkDuration = made ? Basketball.makeShrinkTime : Basketball.shrinkTime;
+    ballState = (made || ballNearFloor()) ? "shrinking" : "landing";
     landingTime = 0;
 };
 
@@ -252,9 +261,9 @@ const updateBallReturn = (delta) => {
             ballState = "held"; // from the next frame on the ball follows the hand again
             ballBody.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased, true);
         }
-    } else if (ballState === "held" && ballScale < 1) {
+    } else if (ballState && ballScale < 1) {
         ballScale = Math.min(1, ballScale + delta / Basketball.growTime); // grow back in the hand
-    } 
+    }
     //scale whole group.
     basketball.scale.setScalar(Math.max(ballScale, 0.001)); // never exactly 0, a scale of 0 cannot be drawn
 };
@@ -268,7 +277,7 @@ const checkMadeShot = (topSensor, bottomSensor) => {
         swish.play();
         shotInProgress = false;
         stats.madeShots++;
-
+        stats.spotProgress++;
         stats.streak++;
         onMake();
         return
@@ -288,7 +297,7 @@ const onMiss = () => {
     fire.heat.value = 0;
     ballMaterial.color.set(Colors.basketball);
     console.log('missed shot');
-    shotReset();
+    shotReset(false);
 }
 
 
@@ -296,11 +305,18 @@ const onMake = () => {
     stats.shootingPercentage = stats.shots > 0 ? (stats.madeShots / stats.shots) * 100 : 0;
     const p = ballBody.translation();
     const onFloor = p.y <= Basketball.radius + 0.02;
+
+    if (stats.spotProgress === 3) {
+        stats.spotProgress = 0;
+        handleSpotChange();
+    }
+
+
     if (stats.streak >= 3) {
         fire.heat.value = 1;
         ballMaterial.color.set(Colors.fireBasketball);
     }
-    shotReset();
+    shotReset(true);
 }
 
 
@@ -338,6 +354,7 @@ const init = async () => {
     const fov = 75;
     const aspect = 2;  // the canvas default
     const near = 0.1;
+
     const far = 100;
     camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
     camera.position.set(0, 9, -7);
@@ -388,6 +405,7 @@ const init = async () => {
 
     const player = createPlayer();
     playerMesh = player.player; // the player's y position, used for jumping
+
     joints = player.joints;
     scene.add(player.player);
     makeAxisGrid(player.player, 'player', 1);
@@ -407,10 +425,14 @@ const init = async () => {
     window.addEventListener('keyup', (event) => {
         if (event.code === 'Space') releaseMeter();
     });
-
-
-
 }
+
+const handleSpotChange = () => {
+    stats.currentSpot = (stats.currentSpot + 1) % Court.spots.length;   // 0, 1, 2, 3, 4, then 0 again
+    const spot = Court.spots[stats.currentSpot];
+    playerMesh.position.set(spot.x, 0, spot.z);
+    playerMesh.rotation.y = spot.facing;
+};
 
 
 //HELPERS AND DEBUG
@@ -477,6 +499,7 @@ const render = (time) => {
 
     updateMeter(delta);
     updateStatsDisplay();
+
     renderer.render(scene, camera);
 }
 

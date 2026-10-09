@@ -14,7 +14,7 @@ export const Basketball = {
     angularDamping: 0.3, // slows the spin down
 
     // how the ball goes back to the hand after a shot is decided
-    shrinkTime: 0.6, // seconds the ball takes to shrink away after it has landed
+    shrinkTime: 0.2, // seconds the ball takes to shrink away after it has landed
     growTime: 0.2, // seconds it takes to grow back to full size in the hand
     landingWait: 3.5, // if the ball has not reached the floor after this many seconds, shrink it anyway
 };

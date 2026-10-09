@@ -105,7 +105,7 @@ export const createPlayer = () => {
         joints[side].elbow = elbow;
     });
 
-    player.position.set(0, 0, 0);
+    player.position.set(0, 0, -1.9); // the player is 1.5 metres from the hoop, facing it
 
     return { player, joints};
 };

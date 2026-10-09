@@ -47,6 +47,20 @@
             top: 0;
             left: 0;
         }
+
+        #stats {
+            position: absolute;
+            max-width: fit-content;
+            max-height: fit-content;
+            top: 0;
+            left: 0;
+            right: 16px;
+            bottom: 16px;
+            background: rgba(0, 0, 0, .8);
+            padding: .5em;
+            color: white;
+            font-family: monospace;
+        }
     </style>
 </head>
 
@@ -57,7 +71,13 @@
         <div id="shotBanner" hidden>SHOT!</div>
         <pre id="readout">waiting for the camera and the model…</pre>
     </div>
-   
+
+    <div id="stats">
+        <p>Shots: <span id="shots">0</span></p>
+        <p>Made Shots: <span id="madeShots">0</span></p>
+        <p>Shooting Percentage: <span id="shootingPercentage">0%</span></p>
+    </div>
+
     <canvas id="c"></canvas>
     <script type="module" src="./js/script.js"></script>
 </body>

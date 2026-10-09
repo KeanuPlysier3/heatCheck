@@ -3,6 +3,7 @@ import { Player } from '../constants/player';
 import { Colors } from '../constants/colors';
 import { Outline } from '../constants/outline';
 import { createOutlineMesh } from '../helpers/outline';
+import { Court } from '../constants/court';
 
 
 export const createPlayer = () => {
@@ -105,7 +106,8 @@ export const createPlayer = () => {
         joints[side].elbow = elbow;
     });
 
-    player.position.set(0, 0, -1.9); // the player is 1.5 metres from the hoop, facing it
+       player.position.set(Court.spots[0].x, 0, Court.spots[0].z);// the player is 1.5 metres from the hoop, facing it
+       player.rotation.y = 3 * Math.PI/2; // the player faces +z, the hoop is at -z, so turn the player around
 
     return { player, joints};
 };

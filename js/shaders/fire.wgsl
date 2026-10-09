@@ -14,7 +14,7 @@ fn hash(p: vec2f) -> f32 {
 
 //takes value and converts it to a smooth random value between -1 and 1, based on the input value.
 fn noise(p: vec2f) -> f32 {
-    let i = floor(p);ok
+    let i = floor(p);
     let f = fract(p);
     let u = f * f * (3.0 - 2.0 * f);
 

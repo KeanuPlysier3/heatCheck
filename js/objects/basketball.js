@@ -3,6 +3,8 @@ import { Basketball } from '../constants/basketball';
 import { Colors } from '../constants/colors';
 import { Outline } from '../constants/outline';
 import { createOutlineMesh } from '../helpers/outline';
+import { uv, uniform } from 'three/tsl';
+import { fireFn } from '../shaders/fire.js';
 
 
 export const createBasketball = () => {
@@ -18,12 +20,37 @@ export const createBasketball = () => {
     const outlineMesh = createOutlineMesh(outlineGeometry);
     basketball.add(outlineMesh);
 
-    const cilinderGeometry = new THREE.CylinderGeometry(Basketball.radius, Basketball.radius, Basketball.radius * 2, 32);
-    const cilinderMaterial = new THREE.MeshBasicMaterial({ color: 0xff6600, transparent: true, opacity: 0, });
-    const cilinder = new THREE.Mesh(cilinderGeometry, cilinderMaterial);
-    cilinder.position.y = Basketball.radius;
-    basketball.add(cilinder);
-    
 
-    return basketball;
+    const fireTime = uniform(0);   // seconds, updated every frame so the flame moves
+    const fireHeat = uniform(0);   // 0 = no fire, 1 = full fire. start at 1 so you can see it
+
+    const fireHeight = Basketball.radius * 7;
+    // the flame is a cylinder, this is its height. The basketball is a sphere, so the flame's base is at the basketball's centre and its tip is above the basketball's top
+    const cilinderGeometry = new THREE.CylinderGeometry(Basketball.radius, Basketball.radius, fireHeight, 32, 1, true);
+    const cilinderMaterial = new THREE.MeshBasicNodeMaterial();
+    cilinderMaterial.colorNode = fireFn({ uv: uv(), time: fireTime, heat: fireHeat });
+    cilinderMaterial.blending = THREE.AdditiveBlending; // black adds nothing, so it becomes see-through
+    cilinderMaterial.transparent = true;
+    cilinderMaterial.depthWrite = false;                // the flame must not hide things behind it
+    cilinderMaterial.side = THREE.DoubleSide
+    const cilinder = new THREE.Mesh(cilinderGeometry, cilinderMaterial);
+
+    cilinder.position.y = fireHeight/2;
+    basketball.add(cilinder);
+
+    //two inner flames
+    const innerFlames = [
+        { radius: Basketball.radius * 0.66, height: fireHeight + Basketball.radius * 2, turn: Math.PI * 0.6 },
+        { radius: Basketball.radius * 0.33, height: fireHeight + Basketball.radius * 4, turn: Math.PI * 1.3 },
+    ];
+    innerFlames.forEach((flame) => {
+        const innerGeometry = new THREE.CylinderGeometry(flame.radius, flame.radius, flame.height, 32, 1, true);
+        const innerCilinder = new THREE.Mesh(innerGeometry, cilinderMaterial);
+        innerCilinder.position.y = flame.height / 2; 
+        innerCilinder.rotation.y = flame.turn; 
+        basketball.add(innerCilinder);
+    });
+
+
+    return { basketball, ballMaterial, fire: { time: fireTime, heat: fireHeat } };
 };

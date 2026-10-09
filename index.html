@@ -61,6 +61,44 @@
             color: white;
             font-family: monospace;
         }
+
+        #meter {
+            position: fixed;
+            right: 1%;
+            /* to the right of the player, on screen */
+            top: 50%;
+            transform: translateY(-50%);
+            width: 22px;
+            height: 500px;
+            background: #1b1030ec;
+            /* the outline colour */
+            border: 4px solid #1B1030;
+            border-radius: 12px;
+            overflow: hidden;
+            /* the fill can't spill past the rounded corners */
+        }
+
+        #meterGreen,
+        #meterFill {
+            position: absolute;
+            left: 0;
+            width: 100%;
+        }
+
+        #meterGreen {
+            background: #B6F500;
+            /* the palette's lime accent */
+            /* bottom and height are set from the Meter constants, in JavaScript */
+        }
+
+        #meterFill {
+            bottom: 0;
+            height: 0%;
+            /* JavaScript changes this every frame */
+            background: #FFF1D0;
+            /* cream */
+            opacity: 0.85;
+        }
     </style>
 </head>
 
@@ -78,6 +116,10 @@
         <p>Shooting Percentage: <span id="shootingPercentage">0%</span></p>
     </div>
 
+    <div id="meter" >
+        <div id="meterGreen"></div>
+        <div id="meterFill"></div>
+    </div>
     <canvas id="c"></canvas>
     <script type="module" src="./js/script.js"></script>
 </body>

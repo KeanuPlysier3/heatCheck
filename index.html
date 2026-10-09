@@ -5,6 +5,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>heatCheck</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Lilita+One&display=swap" rel="stylesheet">
     <style>
         html,
         body {
@@ -99,10 +102,246 @@
             /* cream */
             opacity: 0.85;
         }
+
+        #loading__container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            /* the scene's colours: outline, surround, court teal, hot pink, sunset orange */
+            background: linear-gradient(to top, #1B1030, #4A3470, #16C7B0, #FF3D8B, #FFA552);
+            color: #ffffff;
+            font-family: Arial, sans-serif;
+        }
+
+        #loading {
+            text-shadow: 0 2px 0 #1B1030, 0 0 8px #1B1030;
+            /* a dark edge so the text reads on every colour of the gradient */
+            letter-spacing: .08em;
+        }
+
+        /* bouncing basketball: the div is an empty stage, ::after is the ball and ::before its shadow */
+        #loading__basketball {
+            position: relative;
+            width: 72px;
+            height: 180px;
+            /* 90px of bounce + the ball + a little floor */
+        }
+
+        #loading__basketball::after {
+            content: "";
+            position: absolute;
+            left: 0;
+            bottom: 14px;
+            /* the "floor" the ball lands on */
+            width: 72px;
+            height: 72px;
+            box-sizing: border-box;
+            border: 3px solid #1B1030;
+            border-radius: 50%;
+            background:
+                radial-gradient(circle at 32% 26%, rgba(255, 255, 255, .28), transparent 40%),
+                /* highlight */
+                radial-gradient(circle at -18px 50%, transparent 38px, #1B1030 38px 41px, transparent 41px),
+                /* left seam */
+                radial-gradient(circle at calc(100% + 18px) 50%, transparent 38px, #1B1030 38px 41px, transparent 41px),
+                /* right seam */
+                linear-gradient(#1B1030, #1B1030) center / 3px 100% no-repeat,
+                /* vertical seam */
+                linear-gradient(#1B1030, #1B1030) center / 100% 3px no-repeat,
+                /* horizontal seam */
+                #e8742a;
+            transform-origin: 50% 100%;
+            /* squash and stretch happen from the bottom, so the ball stays on the floor */
+            animation: loading-bounce .9s infinite;
+        }
+
+        #loading__basketball::before {
+            content: "";
+            position: absolute;
+            left: 50%;
+            bottom: 4px;
+            width: 64px;
+            height: 12px;
+            margin-left: -32px;
+            border-radius: 50%;
+            background: rgba(27, 16, 48, .4);
+            animation: loading-shadow .9s infinite;
+        }
+
+
+        #menu {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(1, 183, 255, 0.6);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #menu__canvas {
+            position: absolute;
+            top: 10%;
+            left: 50%;
+            width: 30%;
+            height: 80%;
+
+            transform: rotate(3.5deg);
+        }
+
+        #menu__buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 22px;
+            position: absolute;
+            top: 40%;
+            left: 10%;
+
+        }
+
+        /* big chunky arcade buttons: thick dark outline, a hard "ledge" shadow underneath that the button sinks into when pressed */
+        #menu button {
+            position: relative;
+            overflow: hidden;
+            font-family: "Lilita One", "Chalkboard SE", "Comic Sans MS", system-ui, sans-serif;
+            font-size: clamp(1.8rem, 3.2vw, 2.8rem);
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            color: #FFF1D0;
+            background: #FF3D8B;
+            /* hot pink */
+            border: 6px solid #1B1030;
+            border-radius: 26px;
+            padding: .5em 1.3em;
+            min-width: 11em;
+            cursor: pointer;
+            box-shadow: 0 9px 0 #1B1030;
+            -webkit-text-stroke: 3px #1B1030;
+            paint-order: stroke fill;
+            /* the outline sits behind the letters, so they stay fat */
+            text-shadow: 0 4px 0 #1B1030;
+            transform: rotate(-1.5deg);
+            transition: transform .1s, box-shadow .1s;
+        }
+
+        /* the shiny strip across the top of the button */
+        #menu button::before {
+            content: "";
+            position: absolute;
+            left: 7%;
+            right: 7%;
+            top: 6px;
+            height: 26%;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, .35);
+            pointer-events: none;
+        }
+
+        #menu button:nth-child(odd) {
+            transform: rotate(1.5deg);
+        }
+
+        #menu #freePlayBtn {
+            /* written with #menu so it wins over the shared "#menu button" rule above */
+            background: #B6F500;
+            /* lime */
+            color: #1B1030;
+            -webkit-text-stroke: 0;
+            text-shadow: 0 3px 0 rgba(255, 255, 255, .45);
+        }
+
+        #menu button:hover {
+            transform: translateY(-4px) rotate(0deg) scale(1.05);
+            box-shadow: 0 13px 0 #1B1030;
+        }
+
+        #menu button:active {
+            transform: translateY(7px) rotate(0deg) scale(.98);
+            box-shadow: 0 2px 0 #1B1030;
+        }
+
+        #menu button:focus-visible {
+            outline: 5px solid #FFF1D0;
+            outline-offset: 5px;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            #menu button {
+                transition: none;
+            }
+        }
+
+        @keyframes loading-bounce {
+
+
+            0% {
+                transform: translateY(-90px) scale(1, 1);
+                animation-timing-function: cubic-bezier(.5, 0, 1, .6);
+
+            }
+
+
+            46% {
+                transform: translateY(-6px) scale(.92, 1.1);
+                animation-timing-function: linear;
+            }
+
+
+            50% {
+                transform: translateY(0) scale(1.3, .66);
+                animation-timing-function: ease-out;
+            }
+
+            56% {
+                transform: translateY(-14px) scale(.94, 1.08);
+                animation-timing-function: cubic-bezier(0, .4, .5, 1);
+
+            }
+
+            100% {
+                transform: translateY(-90px) scale(1, 1);
+            }
+        }
+
+        @keyframes loading-shadow {
+
+
+            0%,
+            100% {
+                transform: scale(.55);
+                opacity: .35;
+            }
+
+
+            50% {
+                transform: scale(1.1);
+                opacity: 1;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+
+            /* a still ball resting on the floor */
+            #loading__basketball::after,
+            #loading__basketball::before {
+                animation: none;
+            }
+        }
     </style>
 </head>
 
 <body>
+
+
+
     <div id="stage">
         <video></video>
         <canvas id="overlay"></canvas>
@@ -116,11 +355,28 @@
         <p>Shooting Percentage: <span id="shootingPercentage">0%</span></p>
     </div>
 
-    <div id="meter" >
+    <div id="meter">
         <div id="meterGreen"></div>
         <div id="meterFill"></div>
     </div>
     <canvas id="c"></canvas>
+
+    <div id="menu">
+        <div id="menu__buttons">
+            <button id="freePlayBtn">FreePlay</button>
+            <button id="aroundTheWorldBtn">Around the World</button>
+        </div>
+        <canvas id="menu__canvas"></canvas>
+    </div>
+
+    <div id="loading__container">
+
+        <div id="loading__basketball"></div>
+        <div id="loading">Loading…</div>
+    </div>
+
+
+
     <script type="module" src="./js/script.js"></script>
 </body>
 

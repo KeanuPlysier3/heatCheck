@@ -288,9 +288,15 @@ const render = (time) => {
 
     physicsTime += delta;
 
-    if (physicsTime >= (1 / 60)) {
+    if (ballState === 'held') {
+        const h = handPoint('right');
+        ballBody.setNextKinematicTranslation(h);           // physics follows the hand
+    }
+
+    while (physicsTime >= physicsStep) {
         world.step(eventQueue);
-        physicsTime = 0;
+        physicsTime -= physicsStep;// simulate the world in fixed-size steps, so the simulation is stable and deterministic
+    
     }
 
     if (resizeRendererToDisplaySize(renderer)) {
@@ -304,10 +310,7 @@ const render = (time) => {
     renderer.render(scene, camera);
     updateArms(); // update the player's arm rotations based on the target pose
 
-    if (ballState === 'held') {
-        const h = handPoint('right');
-        ballBody.setNextKinematicTranslation(h);           // physics follows the hand
-    }
+   
     updateJump(delta);
 
 

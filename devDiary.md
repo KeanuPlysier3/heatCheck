@@ -937,3 +937,67 @@ the arms jump from one to the other. Smoothing is the next step.
   step will read the same values.
 - The arm test sliders still work, but they do not move when a pose is applied, and the next pose from the
   webcam overwrites what a slider set.
+
+## 2026-10-09: hoop sensors compare against the ball's collider handle
+
+**What changed:**
+
+- `js/physics.js`:
+  - the ball's collider is now kept in a variable, `ballCollider`, and returned from `createPhysics()`
+    together with the rest;
+  - `sensorOutput` takes `ballCollider` where it took `ballBody`, and its four comparisons use
+    `ballCollider.handle` where they used `ballBody.handle`.
+- `js/script.js`: `ballCollider` is added to the physics variables, filled from `createPhysics()`, and
+  passed to `sensorOutput`.
+
+**Why:** the hoop sensors never reported the ball. Their checks compared the handles from a collision
+event with `ballBody.handle`, and that is not the number the event contains.
+
+**How it works:**
+
+- In Rapier a rigid body and its collider are two separate objects. The body holds the movement (position,
+  velocity, mass); the collider is the shape attached to it that touches other things. Each has its own
+  `handle`, a number Rapier uses to identify it, and the two are counted separately.
+- `eventQueue.drainCollisionEvents((handle1, handle2, started) => ...)` reports two **collider** handles.
+  So the ball has to be recognised by its collider's handle. Comparing with the body's handle would only
+  match by accident, if the two numbers happened to be equal.
+- `world.createCollider(desc, ballBody)` returns the collider it creates. That return value was thrown
+  away before; storing it in `ballCollider` is what makes its handle available.
+- `ballBody` is still used everywhere the ball is moved or read (`setLinvel`, `translation()`,
+  `setBodyType`), because those belong to the body.
+- Still open in `sensorOutput`, not part of this change: the sensor side of the comparison uses
+  `sensors.top` and `sensors.bottom`, which are collider objects, where it needs their `.handle`; and the
+  function's `return` is inside the callback, so the function itself returns nothing.
+
+## 2026-10-09: functions in script.js regrouped
+
+**What changed:** `js/script.js`. The functions were moved into groups, each under a comment header. No
+line of code was changed, added or removed; only the order, and six header comments.
+
+| Group | Contains |
+| --- | --- |
+| poses and arms | `poseHold`, `poseUntil`, `handlePose`, `updateArms`, `lerp`, `handPoint` |
+| jump | `startJump`, `updateJump` |
+| shot | `shoot` |
+| setup | `init` |
+| helpers | `resizeRendererToDisplaySize`, `makeAxisGrid` |
+| the loop | `render` |
+
+The imports and the variables stay at the top, and the three lines that start everything stay at the
+bottom.
+
+**Why:** functions that work together had drifted apart as the file grew. `updateArms` was at the top
+while `lerp`, which it calls, was fifty lines further down, and `handlePose`, which sets the pose that
+`updateArms` moves towards, was further still.
+
+**How it works:**
+
+- The order of function definitions does not affect what the program does here. A function's body only
+  runs when the function is called, and nothing is called until the last three lines of the file
+  (`init()`, `await renderer.init()`, `renderer.setAnimationLoop(render)`). By then every function above
+  them has been defined.
+- So `handlePose` can call `startJump` and `shoot` even though they are defined below it.
+- This only holds because the calls are at the bottom. A `const` function cannot be called on a line
+  above its definition while the file is first being read.
+- Checked by comparing the file before and after: the same 226 lines of code, each the same number of
+  times, and the project still bundles.

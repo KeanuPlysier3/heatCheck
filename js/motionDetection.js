@@ -26,7 +26,6 @@ const shot = {
 //shot memory
 const shotState = {
     loadedAt: { left: null, right: null },    
-
     cooldownUntil: 0, 
     count: 0, 
 };

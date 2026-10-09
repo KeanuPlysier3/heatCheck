@@ -3,10 +3,13 @@ import { Basketball } from './constants/basketball';
 import { Court } from './constants/court';
 await RAPIER.init();
 
+
+let eventQueue = null;
+
 export const createPhysics = () => {
     const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
 
-   //parameter are half extents, so the ground is 50x50 units
+    //parameter are half extents, so the ground is 50x50 units
     world.createCollider(
         RAPIER.ColliderDesc.cuboid(25, 0.1, 25).setTranslation(0, -0.1, 0)
     );
@@ -40,7 +43,7 @@ export const createPhysics = () => {
         );
     }
 
-   
+
     const poleZ = rimFromBaseline + poleBehindBaseline;
     const poleLength = poleHeight + Court.thickness;
     world.createCollider(
@@ -48,7 +51,7 @@ export const createPhysics = () => {
             .setTranslation(0, (poleHeight - Court.thickness) / 2, rimZ + poleZ)
     );
 
-//arm
+    //arm
     const armLength = poleZ - backboardBack;
     world.createCollider(
         RAPIER.ColliderDesc.cuboid(armThickness / 2, armThickness / 2, armLength / 2)
@@ -75,6 +78,11 @@ export const createPhysics = () => {
     };
 
 
+
+    eventQueue = new RAPIER.EventQueue(true);//start tracking
+
+
+
     // ball
     const ballBody = world.createRigidBody(
         RAPIER.RigidBodyDesc.kinematicPositionBased()
@@ -83,7 +91,9 @@ export const createPhysics = () => {
             .setAngularDamping(Basketball.angularDamping) // slow down over time, so it doesn't spin forever
             .setCcdEnabled(true) // continuous collision detection, so it doesn't go through the ground
     );
-    world.createCollider(
+    // kept in a variable: collision events report collider handles, and this is the ball's collider.
+    // the rigid body (ballBody) has a handle too, but that is a different number
+    const ballCollider = world.createCollider(
         RAPIER.ColliderDesc.ball(Basketball.radius)
             .setMass(Basketball.mass)
             .setRestitution(Basketball.restitution)
@@ -94,5 +104,27 @@ export const createPhysics = () => {
 
 
 
-    return { world, ballBody, sensors };
+    return { world, ballBody, ballCollider, sensors, eventQueue };
 };
+
+
+
+export const sensorOutput = (world, ballCollider, sensors, eventQueue) => {
+    let topSensor = false;
+    let bottomSensor = false;
+    eventQueue.drainCollisionEvents((handle1, handle2, started) => {
+        if (started) {
+            if ((handle1 === sensors.top.handle && handle2 === ballCollider.handle) ||
+                (handle2 === sensors.top.handle && handle1 === ballCollider.handle)) {
+                topSensor = true;
+            }
+
+            if ((handle1 === sensors.bottom.handle   && handle2 === ballCollider.handle) ||
+                (handle2 === sensors.bottom.handle && handle1 === ballCollider.handle)) {
+                bottomSensor = true;
+            }
+
+        }
+    });
+    return { topSensor, bottomSensor };
+}

@@ -12,6 +12,7 @@ export const Court = {
         radius: 6.75, // measured from the point under the rim
         cornerX: 6.6, // the straight corner pieces, measured from the centre line
         lineWidth: 0.15, // the width of the line, measured from its centre
+        spotBehindLine: 0.5, // the shooting spots are this far outside the line
     },
 
     // the key (the painted rectangle in front of the hoop), official FIBA sizes
@@ -42,3 +43,31 @@ export const Court = {
 // so changing the pole, the arm or the backboard never moves it
 Court.Hoop.rimZ = Court.depth / 2 - Court.Hoop.rimFromBaseline;
 
+// the five shooting spots around the three-point line, in the order they are played:
+// corner, wing, top, wing, corner. left and right are the player's own, facing the hoop,
+// so left is the +x side. each spot is on the floor (y = 0) and has:
+//   x, z    where the player stands
+//   facing  the angle (radians) to turn the player around y so it looks at the rim
+const makeSpot = (name, x, z) => ({
+    name, x, z,
+    facing: Math.atan2(0 - x, Court.Hoop.rimZ - z), // the rim is at x = 0, z = rimZ. 0 = facing +z
+});
+
+// a spot on the arc: degrees is the angle around the rim, 90 = straight in front of the hoop
+const makeArcSpot = (name, degrees) => {
+    const angle = degrees * Math.PI / 180;
+    const distance = Court.threePoint.radius + Court.threePoint.spotBehindLine;
+    return makeSpot(name, distance * Math.cos(angle), Court.Hoop.rimZ - distance * Math.sin(angle));
+};
+
+// a corner spot: beside the straight piece of the line, level with the rim
+const makeCornerSpot = (name, side) =>
+    makeSpot(name, side * (Court.threePoint.cornerX + Court.threePoint.spotBehindLine), Court.Hoop.rimZ);
+
+Court.spots = [
+    makeCornerSpot('left corner', 1),
+    makeArcSpot('left wing', 45),
+    makeArcSpot('top', 90),
+    makeArcSpot('right wing', 135),
+    makeCornerSpot('right corner', -1),
+];

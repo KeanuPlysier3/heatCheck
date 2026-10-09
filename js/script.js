@@ -11,21 +11,33 @@ import { createHoop } from './objects/hoop';
 import { Colors } from './constants/colors';
 import { Player } from './constants/player';
 import { createBasketball } from './objects/basketball';
+import { Basketball } from './constants/basketball.js';
 import { createPhysics } from './physics.js';
 import { sensorOutput } from './physics.js';
+import { Meter } from './constants/meter.js';
+import { math } from '@tensorflow/tfjs-core';
 
 let canvas;
 let renderer;
 let scene;
 let camera;
 let basketball; // the basketball mesh, used to update its position every frame
+let ballMaterial
+let fire; // the basketball's fire shader uniforms, used to update the flame every frame
 let controls;
 let joints; // the player's shoulder and elbow pivots, filled in init
 let playerMesh; // the player's y position, used for jumping
 let world, ballBody, ballCollider, sensors, eventQueue; // physics world, filled in init
 const physicsStep = 1 / 60;   // seconds per physics step
 let lastTime = 0;
-let physicsTime = 0;          // real time that hasn't been simulated yet
+let physicsTime = 0;    // real time that hasn't been simulated yet
+
+let meterValue = 0;       // 0 = empty, 1 = full
+let meterActive = false;  // true while a shot is being loaded
+let meterElement, meterFill, meterGreen; // the bar's elements, filled in init
+
+let passedTop = false; // whether the ball has passed the top sensor
+let shotInProgress = false; // whether a shot is in progress, used to prevent multiple makes from one shot
 
 let shotArmed = false; // whether the shot is armed and ready to be taken
 
@@ -33,10 +45,18 @@ let stats = {
     shots: 0,
     madeShots: 0,
     shootingPercentage: 0,
+    streak: 0,
 };
 
+const swish = new Audio('soundEffects/swish1.mp3');
+swish.volume = 0.7; // set the volume to 70% of the original
 
-let ballState = "held"; //held or flying
+
+
+
+let ballState = "held"; // held: in the hand. flying: a shot in the air. landing: shot decided, waiting for the floor. shrinking: on its way back
+let ballScale = 1;      // the ball's size on screen: 1 = full size, 0 = gone
+let landingTime = 0;    // seconds spent waiting for the ball to reach the floor
 
 const gui = new GUI();
 
@@ -64,6 +84,7 @@ const handlePose = (arms) => {
     if (def) {
         targetPose = Player.poses.default;
         poseUntil = now + poseHold.default;
+        resetMeter(); // reset the meter when the arms are back to default
 
         return;
     }
@@ -72,6 +93,7 @@ const handlePose = (arms) => {
         targetPose = Player.poses.loaded;
         poseUntil = now + poseHold.loaded;      // restart the clock on every loaded frame
         shotArmed = true; // the shot is armed and ready to be taken
+        if (!shotInProgress) startMeter(); // start the meter when the arms are loaded
         return;
     }
 
@@ -87,7 +109,7 @@ const handlePose = (arms) => {
         poseUntil = now + poseHold.release;
         if (shotArmed) {
             shotArmed = false;
-            shoot();
+            releaseMeter(); // take the shot when the arms are released
         }
         return;
     }
@@ -132,10 +154,55 @@ const updateJump = (delta) => {
 };
 
 
-const shoot = () => {
+const resetMeter = () => {
+    meterValue = 0;
+    meterActive = false;
+};
+
+const startMeter = () => {
+    if (meterActive) return;   // already filling
+    meterActive = true;
+    meterValue = 0;
+};
+
+const releaseMeter = () => {
+    if (!meterActive) return;  // nothing to release
+    meterActive = false;
+    console.log('released at', meterValue.toFixed(2));
+
+    const greenBottom = Meter.greenCentre - Meter.greenWidth / 2;
+    const greenTop = Meter.greenCentre + Meter.greenWidth / 2;
+
+    let power = 1;                                                         // 1 = the perfect shot
+    if (meterValue < greenBottom) {
+        const howEarly = (greenBottom - meterValue) / greenBottom;         // 0 at the green's edge, 1 at an empty meter
+        power = 1 - howEarly * Meter.maxError;                             // early: less power, short
+    } else if (meterValue > greenTop) {
+        const howLate = (meterValue - greenTop) / (1 - greenTop);          // 0 at the green's edge, 1 at a full meter
+        power = 1 + howLate * Meter.maxError;                              // late: more power, long
+    } else {
+        console.log('Perfect shot!');
+    }
+
+    shoot(power);
+
+};
+
+const updateMeter = (delta) => {
+    if (meterActive) {
+        meterValue = Math.min(1, meterValue + delta / Meter.duration);   // stops at the top
+    }
+    meterElement.hidden = !meterActive;
+    meterFill.style.height = meterValue * 100 + '%';
+};
+
+
+const shoot = (power = 1) => {
     if (ballState !== 'held') return; //avoid shooting if the ball is already flying
     stats.shots++;
     ballState = "flying";
+    shotInProgress = true;
+    passedTop = false;
     ballBody.setBodyType(RAPIER.RigidBodyType.Dynamic, true); // make the ball dynamic so it can be affected by physics
 
 
@@ -156,15 +223,84 @@ const shoot = () => {
     const velocityX = distanceX / time;
     const velocityZ = distanceZ / time;
 
-    const velocityY = (distanceY + 0.5 * gravity * time * time) / time + 0.5 * gravity * deltaTime; //formula for vertical motion under gravity ½.g.t²
+    const velocityY = ((distanceY + 0.5 * gravity * time * time) / time + 0.5 * gravity * deltaTime) * power; //formula for vertical motion under gravity ½.g.t²
 
     ballBody.setLinvel({ x: velocityX, y: velocityY, z: velocityZ }, true); //linear velocity
     ballBody.setAngvel({ x: 0, y: 0, z: 0 }, true)// angular velocity (backspin)
+}
 
-    setTimeout(() => {
-        ballState = "held";
-        ballBody.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased, true);
-    }, 3000); // 3seconds later, reset the ball to be held again
+// the shot is decided: let the ball land, shrink it away, and give it back to the player.
+// this only starts the sequence, updateBallReturn does the work frame by frame
+const shotReset = () => {
+    ballState = ballNearFloor() ? "shrinking" : "landing";
+    landingTime = 0;
+};
+
+// true when the ball is on the floor or within a few centimetres of it.
+// the ball's position is its centre, which is one radius above the floor when it touches
+const ballNearFloor = () => ballBody.translation().y <= Basketball.radius + 0.05;
+
+// runs every frame: moves the ball through landing → shrinking → held, and grows it back in the hand
+const updateBallReturn = (delta) => {
+    if (ballState === "landing") {
+        // the ball keeps bouncing as a normal physics ball until it touches the floor
+        landingTime += delta;
+        if (ballNearFloor() || landingTime > Basketball.landingWait) ballState = "shrinking";
+    } else if (ballState === "shrinking") {
+        ballScale = Math.max(0, ballScale - delta / Basketball.shrinkTime); // from 1 to 0 in shrinkTime seconds
+        if (ballScale === 0) {
+            ballState = "held"; // from the next frame on the ball follows the hand again
+            ballBody.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased, true);
+        }
+    } else if (ballState === "held" && ballScale < 1) {
+        ballScale = Math.min(1, ballScale + delta / Basketball.growTime); // grow back in the hand
+    } 
+    //scale whole group.
+    basketball.scale.setScalar(Math.max(ballScale, 0.001)); // never exactly 0, a scale of 0 cannot be drawn
+};
+
+const checkMadeShot = (topSensor, bottomSensor) => {
+    if (topSensor) passedTop = true;
+
+    if (bottomSensor && passedTop && shotInProgress) {
+        passedTop = false;
+        swish.currentTime = 0;
+        swish.play();
+        shotInProgress = false;
+        stats.madeShots++;
+
+        stats.streak++;
+        onMake();
+        return
+    }
+
+
+    const onFloor = ballBody.translation().y <= Basketball.radius + 0.02;
+    if (onFloor && shotInProgress) {
+        shotInProgress = false;
+        stats.streak = 0;
+        onMiss();
+    }
+};
+
+const onMiss = () => {
+    stats.shootingPercentage = stats.shots > 0 ? (stats.madeShots / stats.shots) * 100 : 0;
+    fire.heat.value = 0;
+    ballMaterial.color.set(Colors.basketball);
+    console.log('missed shot');
+    shotReset();
+}
+
+
+const onMake = () => {
+    stats.shootingPercentage = stats.shots > 0 ? (stats.madeShots / stats.shots) * 100 : 0;
+    const p = ballBody.translation();
+    const onFloor = p.y <= Basketball.radius + 0.02;
+    if (stats.streak >= 3) {
+        fire.heat.value = 1;
+        ballMaterial.color.set(Colors.fireBasketball);
+    }
+    shotReset();
 }
 
 
@@ -181,6 +317,13 @@ const updateStatsDisplay = () => {
 
 //SETUP
 const init = async () => {
+
+    meterElement = document.querySelector('#meter');
+    meterGreen = document.querySelector('#meterGreen');
+    meterFill = document.querySelector('#meterFill');
+
+    meterGreen.style.bottom = (Meter.greenCentre - Meter.greenWidth / 2) * 100 + '%';
+    meterGreen.style.height = Meter.greenWidth * 100 + '%';
 
     canvas = document.querySelector('#c');
     renderer = new THREE.WebGPURenderer({
@@ -249,7 +392,7 @@ const init = async () => {
     scene.add(player.player);
     makeAxisGrid(player.player, 'player', 1);
 
-    basketball = createBasketball();
+    ({ basketball, ballMaterial, fire } = createBasketball());
     scene.add(basketball);
     makeAxisGrid(basketball, 'basketball', 1);
 
@@ -257,6 +400,14 @@ const init = async () => {
 
 
     motionDetection(handlePose); // start the motion detection and shot counting, handlePose gets the arms every frame
+
+    window.addEventListener('keydown', (event) => {
+        if (event.code === 'Space' && !event.repeat) startMeter();
+    });
+    window.addEventListener('keyup', (event) => {
+        if (event.code === 'Space') releaseMeter();
+    });
+
 
 
 }
@@ -296,7 +447,7 @@ const render = (time) => {
     while (physicsTime >= physicsStep) {
         world.step(eventQueue);
         physicsTime -= physicsStep;// simulate the world in fixed-size steps, so the simulation is stable and deterministic
-    
+
     }
 
     if (resizeRendererToDisplaySize(renderer)) {
@@ -307,26 +458,26 @@ const render = (time) => {
 
     controls.update(); // DEBUG ONLY: needed every frame for the orbit camera's damping
 
-    renderer.render(scene, camera);
+
     updateArms(); // update the player's arm rotations based on the target pose
 
-   
+
     updateJump(delta);
+    updateBallReturn(delta); // landing, shrinking and growing back of the ball after a shot
 
 
     const p = ballBody.translation();
     basketball.position.set(p.x, p.y, p.z);
 
     const { topSensor, bottomSensor } = sensorOutput(world, ballCollider, sensors, eventQueue);
-    if (topSensor) {
-        console.log("Ball is through the hoop!");
-    }
-    if (bottomSensor) {
-        console.log("Ball has exited the hoop!");
-        stats.madeShots++;
-        stats.shootingPercentage = (stats.madeShots / stats.shots) * 100;
-    }
+
+    checkMadeShot(topSensor, bottomSensor);
+    fire.time.value = time;
+
+
+    updateMeter(delta);
     updateStatsDisplay();
+    renderer.render(scene, camera);
 }
 
 

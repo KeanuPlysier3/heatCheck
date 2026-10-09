@@ -1001,3 +1001,200 @@ while `lerp`, which it calls, was fifty lines further down, and `handlePose`, wh
   above its definition while the file is first being read.
 - Checked by comparing the file before and after: the same 226 lines of code, each the same number of
   times, and the project still bundles.
+
+## 2026-10-09: the ball's fire is three nested cylinders
+
+**What changed:** `js/objects/basketball.js`. Below the existing fire cylinder, two more are created in a
+loop over a small `innerFlames` list:
+
+| Flame | Radius | Raised by | Turned around y |
+| --- | --- | --- | --- |
+| first (already there) | `Basketball.radius` | 0 | 0 |
+| second | `Basketball.radius * 0.66` | 1 radius | 108° (`Math.PI * 0.6`) |
+| third | `Basketball.radius * 0.33` | 2 radii | 234° (`Math.PI * 1.3`) |
+
+All three have the same height (`fireHeight`) and use the same material, `cilinderMaterial`.
+
+**Why:** one cylinder is a flat picture of a flame rolled into a tube. Seen from the side it looks like a
+sheet around the ball with nothing inside. Flames at three depths, the inner ones reaching higher, give the
+fire a body: from any angle there are flames in front of and behind each other, and the middle rises to a
+point.
+
+**How it works:**
+
+- A material can be shared by several meshes, the same way one geometry was shared by the sun, earth and
+  moon. The fire material holds the shader (`colorNode = fireFn(...)`) with its two uniforms, `fireTime`
+  and `fireHeat`. Because the three cylinders share it, updating `fire.time.value` and `fire.heat.value`
+  in `script.js` drives all of them, and nothing there had to change.
+- Each inner cylinder needs its own geometry, because its radius differs. The height, the 32 sides and the
+  open ends (`true`, so no top and bottom discs) are the same as the first one's.
+- A cylinder is centred on its middle, so `fireHeight / 2` puts its base at the ball's centre, as for the
+  first one. `+ flame.lift` then moves the whole tube up, so the narrower flames start and end higher.
+- The shader draws the flame from the cylinder's own texture coordinate, which runs 0 to 1 around it. Three
+  cylinders with the same coordinate would show the same flame at the same angle, just smaller, like rings
+  of one picture. `rotation.y` turns each one by a different amount, so their tongues are at different
+  places around the ball.
+- The material uses additive blending, so where flames overlap on screen their light adds up. The centre
+  of the fire, where up to three tubes are behind each other, is therefore brighter and whiter than the
+  edge. If that is too much, lowering `fireHeat` dims all three.
+- Everything is a child of the `basketball` group, so the fire follows the ball and stays upright.
+
+## 2026-10-09: inner flames keep the first flame's centre and are taller
+
+**What changed:** `js/objects/basketball.js`, the `innerFlames` list and the loop under it.
+
+- Each inner flame now has a `height` where it had a `lift`: the second is `fireHeight + 2 radii` tall,
+  the third `fireHeight + 4 radii`.
+- All three cylinders are at the same `position.y`, `fireHeight / 2`. The inner ones used to be at
+  `fireHeight / 2 + lift`.
+- The radii and the turns are unchanged.
+
+**Why:** the inner flames were the same height as the outer one and only moved upward, which left their
+lower ends hanging above the ball's centre. They are meant to share the first flame's centre and differ in
+how tall they are.
+
+**How it works:**
+
+- A cylinder is positioned by its centre and grows equally in both directions from it. With the same centre
+  for all three, a taller cylinder reaches further up and equally further down:
+
+  | Flame | Height | Top above the ball's centre | Bottom |
+  | --- | --- | --- | --- |
+  | first | 7 radii | 7 radii | at the ball's centre |
+  | second | 9 radii | 8 radii | 1 radius below the centre |
+  | third | 11 radii | 9 radii | 2 radii below the centre |
+
+  The tops are at the same heights as before this change, since each flame gained twice what it used to be
+  lifted by.
+- The shader draws the flame across the cylinder's full height (its texture coordinate runs 0 at the bottom
+  to 1 at the top), so a taller cylinder shows a taller, more stretched flame, starting from its own bottom
+  edge.
+- The parts below the ball's centre are mostly inside the ball and hidden by it. The third flame's lower
+  end reaches 2 radii down, which is 1 radius below the bottom of the ball, so a narrow piece of it shows
+  underneath.
+
+## 2026-10-09: the five shooting spots
+
+**What changed:** `js/constants/court.js`.
+
+- `Court.threePoint` has a new value, `spotBehindLine` (0.5): how far outside the three-point line the
+  player stands.
+- Below the object, a new list `Court.spots` with five entries, built by three small helper functions
+  (`makeSpot`, `makeArcSpot`, `makeCornerSpot`):
+
+  | # | Name | x | z | Facing | Distance to the rim |
+  | --- | --- | --- | --- | --- | --- |
+  | 0 | left corner | 7.10 | 5.42 | -90° | 7.10 m |
+  | 1 | left wing | 5.13 | 0.30 | -45° | 7.25 m |
+  | 2 | top | 0.00 | -1.83 | 0° | 7.25 m |
+  | 3 | right wing | -5.13 | 0.30 | 45° | 7.25 m |
+  | 4 | right corner | -7.10 | 5.42 | 90° | 7.10 m |
+
+Nothing uses the list yet, so the game is unchanged.
+
+**Why:** the game moves the player to the next of five spots around the arc after each made shot. The
+spots are positions on the court that follow from the three-point line, so they belong with the court's
+constants and are calculated from the same radius and rim position the line is drawn with. If the line or
+the hoop moves, the spots move too.
+
+**How it works:**
+
+- **Each spot** is an object with a `name`, the floor position `x` and `z`, and `facing`. The height is not
+  stored: the player's origin is on the floor, so y is 0.
+- **Arc spots** (`makeArcSpot(name, degrees)`): a point on a circle around the rim, the same maths as the
+  three-point line. The circle's radius is the line's radius plus `spotBehindLine`. For an angle,
+  `distance * cos(angle)` is how far the point is to the side (x) and `distance * sin(angle)` how far in
+  front of the rim, which is subtracted from `rimZ` because "in front of the rim" is the -z direction.
+  90° is straight in front of the hoop, 45° and 135° are the two wings.
+- **Corner spots** (`makeCornerSpot(name, side)`): the line is straight there, at `x = ±cornerX`, so the
+  spot is `spotBehindLine` further out than that, level with the rim (`z = rimZ`). `side` is 1 or -1.
+- **Left and right** are the player's own while facing the hoop. The player faces +z, so its left is the
+  +x side, the same convention as the player's arms.
+- **`facing`** is the rotation around y that turns the player towards the rim:
+  `Math.atan2(0 - x, rimZ - z)`. `atan2` takes the two sides of a triangle, here how far the rim is to the
+  side and how far ahead, and returns the angle, for any direction. An unrotated player faces +z, which is
+  angle 0, so the value can be used directly as `player.rotation.y`.
+- **The order** in the list is the order of play: corner, wing, top, wing, corner. After the last one the
+  game goes back to the first, which is `(index + 1) % Court.spots.length`.
+- The spots are created after the `Court` object for the same reason as `rimZ`: they read `Court`'s own
+  values, which only exist once the object is complete.
+- Checked by printing the list: all five are inside the court (15 x 14) and 7.10 to 7.25 m from the rim.
+
+## 2026-10-10: the ball lands, shrinks away and grows back in the hand
+
+**What changed:**
+
+- `js/constants/basketball.js`: three new values in `Basketball`: `shrinkTime` (0.6 s), `growTime` (0.2 s)
+  and `landingWait` (1.5 s).
+- `js/script.js`:
+  - `ballState` has two more states. It was `held` or `flying`; now also `landing` and `shrinking`.
+  - two new variables, `ballScale` (1 = full size, 0 = gone) and `landingTime`.
+  - `shotReset()` no longer uses a 600 ms `setTimeout`. It sets `ballState` to `landing` and clears
+    `landingTime`.
+  - new function `updateBallReturn(delta)`, called every frame from `render`, after `updateJump(delta)`.
+
+**Why:** after a make or a miss the ball used to jump straight back into the hand 0.6 s later, wherever it
+was at that moment. That looked like a glitch. Now the ball finishes its fall, bounces, shrinks to nothing
+and reappears in the hand by growing, so there is no visible jump at either end.
+
+**How it works:**
+
+- A change of size over time has to be done a little every frame. A `setTimeout` can only do one thing
+  once, later, so the timer was replaced by a state that `render` advances.
+- The ball's life is now a loop of four states:
+
+  | State | Meaning | Ends when |
+  | --- | --- | --- |
+  | `held` | in the player's hand, follows it | a shot is released |
+  | `flying` | in the air, the shot is undecided | a make or a miss is decided, which calls `shotReset()` |
+  | `landing` | decided, still a normal bouncing physics ball | it touches the floor, or `landingWait` has passed |
+  | `shrinking` | getting smaller | its scale reaches 0 |
+
+- **`landing`** matters for makes. A make is decided at the hoop, three metres up. Without this state the
+  ball would shrink in mid-air. A miss is decided on the floor, so it passes through `landing` in one
+  frame. The floor test is the same as for a miss: the ball's centre is within one radius (plus 2 cm) of
+  y = 0. `landingWait` is the way out if the ball never gets there, for example when it comes to rest on
+  the rim.
+- **`shrinking`**: each frame `ballScale` goes down by `delta / Basketball.shrinkTime`. `delta` is the
+  frame's length in seconds, so the scale goes from 1 to 0 in exactly `shrinkTime` seconds on any screen.
+  `Math.max(0, ...)` stops it at 0. At 0 the ball becomes `held` and its body is switched back to
+  kinematic, so from the next frame it follows the hand again.
+- **Growing back**: while `held`, a scale below 1 goes up by `delta / Basketball.growTime` per frame,
+  stopped at 1 by `Math.min`.
+- `basketball.scale.setScalar(...)` sets x, y and z scale to the same value. It is applied to the
+  `basketball` group, so the ball, its outline shell and the fire cylinders all shrink together. The
+  smallest value used is 0.001: an object scaled to exactly 0 has no size to draw.
+- Only the picture changes size. The physics ball keeps its radius, so it keeps bouncing normally while it
+  shrinks.
+- `shoot()` already refuses to shoot unless `ballState` is `held`, so no shot can start while the ball is
+  landing or shrinking.
+
+## 2026-10-10: a missed ball shrinks from its first floor touch
+
+**What changed:** `js/script.js`.
+
+- New small function `ballNearFloor()`: true when the ball's centre is within one radius plus 5 cm of the
+  floor.
+- `shotReset()` now sets `ballState` to `"shrinking"` when the ball is near the floor, and to `"landing"`
+  otherwise. It always used `"landing"` before.
+- `updateBallReturn` uses `ballNearFloor()` for its landing check, where it had its own copy with a 2 cm
+  margin.
+
+**Why:** after a miss, the ball started shrinking in mid-air, up to a second and a half after it had
+bounced. A miss is decided at the moment the ball touches the floor. `shotReset()` then put the ball in the
+`landing` state, which waits for the ball to touch the floor. That check ran on the next frame, when the
+ball had already bounced a few centimetres up, so it kept waiting: either for the second bounce, or for
+`landingWait` (1.5 s) to run out, which happened while the ball was still in the air on a high bounce.
+
+**How it works:**
+
+- The `landing` state exists for makes, which are decided at the hoop, three metres up, and must fall
+  before shrinking. A miss is already on the floor when it is decided, so it has nothing to wait for.
+  `shotReset()` asks where the ball is and picks the state that fits.
+- `condition ? a : b` gives `a` when the condition is true and `b` when it is false.
+- After a miss the ball now shrinks during its first bounce: it starts at the floor and is gone 0.6 s
+  later, on its way up.
+- The margin went from 2 cm to 5 cm. The position is looked at once per frame, and a fast ball is only
+  within a couple of centimetres of the floor for a very short time. A wider margin makes it less likely
+  that a made ball's landing is not noticed, which would leave it to the 1.5 s timeout.
+- The floor test for deciding a miss, in `checkMadeShot`, is unchanged and keeps its 2 cm margin.

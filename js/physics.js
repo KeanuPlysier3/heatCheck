@@ -79,7 +79,7 @@ export const createPhysics = () => {
 
 
 
-    eventQueue = new RAPIER.EventQueue(true);//start tracking
+    eventQueue = new RAPIER.EventQueue(false);//we lett sensor output drain the list.
 
 
 

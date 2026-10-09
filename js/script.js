@@ -15,6 +15,7 @@ import { Basketball } from './constants/basketball.js';
 import { createPhysics } from './physics.js';
 import { sensorOutput } from './physics.js';
 import { Meter } from './constants/meter.js';
+import { Camera } from './constants/camera.js';
 import { math } from '@tensorflow/tfjs-core';
 
 let canvas;
@@ -27,13 +28,19 @@ let fire; // the basketball's fire shader uniforms, used to update the flame eve
 let controls;
 let joints; // the player's shoulder and elbow pivots, filled in init
 let playerMesh; // the player's y position, used for jumping
+
+let menuPlayerMesh; // the player's mesh in the menu, used to rotate it
 let world, ballBody, ballCollider, sensors, eventQueue; // physics world, filled in init
 const physicsStep = 1 / 60;   // seconds per physics step
 let lastTime = 0;
 let physicsTime = 0;    // real time that hasn't been simulated yet
 
+let menuRenderer;
 
+let menuCamera;
+let menuScene;
 
+let menu;
 let meterValue = 0;       // 0 = empty, 1 = full
 let meterActive = false;  // true while a shot is being loaded
 let meterElement, meterFill, meterGreen; // the bar's elements, filled in init
@@ -53,11 +60,15 @@ let stats = {
     spotProgress: 0,
 };
 
+const track = new Audio('music/lofi.mp3');
+track.volume = 0.3; // set the volume to 30% of the original
+
+
 const swish = new Audio('soundEffects/swish1.mp3');
 swish.volume = 0.7; // set the volume to 70% of the original
 
 const greenGiant = new Audio('soundEffects/GreenGiant.mp3');
-greenGiant.volume = 0.7;
+greenGiant.volume = 0.2;
 
 let ballState = "held"; // held: in the hand. flying: a shot in the air. landing: shot decided, waiting for the floor. shrinking: on its way back
 let ballScale = 1;      // the ball's size on screen: 1 = full size, 0 = gone
@@ -331,7 +342,57 @@ const updateStatsDisplay = () => {
     shootingPercentageElement.textContent = stats.shootingPercentage.toFixed(2) + '%';
 };
 
+//MENU
+const handleFreeplayClick = () => {
+    document.querySelector('#menu').hidden = true;
+    menuRenderer.setAnimationLoop(null); // stop the menu render loop
+    menu.style.display = 'none';
+    placeCamera(); // move the camera to the current spot's position
+    
+
+}
+
 //SETUP
+const menuInit = () => {    
+    const menuButtons = document.querySelector('#menu__buttons');
+    menu = document.querySelector('#menu');
+    const freeplayButton = document.querySelector('#freePlayBtn');
+    const menuCanvas = document.querySelector('#menu__canvas');
+
+    freeplayButton.addEventListener('click', handleFreeplayClick);
+
+    menuRenderer = new THREE.WebGPURenderer({
+        canvas: menuCanvas,   // the option has to be called "canvas"; a bare menuCanvas would be ignored
+        alpha: true,
+        antialias: true
+    });
+
+    menuRenderer.shadowMap.enabled = true; // enable shadow maps
+
+    menuScene = new THREE.Scene();
+
+    
+    menuCamera = new THREE.PerspectiveCamera(75, menuCanvas.clientWidth / menuCanvas.clientHeight, 0.1, 100);
+    
+
+
+    const player = createPlayer();
+    menuPlayerMesh = player.player;
+    menuPlayerMesh.position.set(0, 0, 0);
+    menuPlayerMesh.rotation.y = Math.PI; // face the camera
+
+    menuScene.add(menuPlayerMesh);
+
+
+
+
+    // the player is turned to face -z, so the camera stands on the -z side, level with their chest, looking straight at them
+    const chestHeight = Player.height * 0.55;
+    menuCamera.position.set(0, chestHeight, -2);
+    menuCamera.lookAt(0, chestHeight, 0);
+    // no render call here: the renderer is not initialised yet, the animation loop in the bottom of the file draws it
+}
+
 const init = async () => {
 
     meterElement = document.querySelector('#meter');
@@ -349,23 +410,6 @@ const init = async () => {
     });
 
     renderer.shadowMap.enabled = true; // enable shadow maps
-
-
-    const fov = 75;
-    const aspect = 2;  // the canvas default
-    const near = 0.1;
-
-    const far = 100;
-    camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
-    camera.position.set(0, 9, -7);
-
-    camera.lookAt(0, 0, 0);
-
-    controls = new OrbitControls(camera, renderer.domElement); // moves `camera`, listens for mouse input on the canvas
-    controls.enableDamping = true; // the movement glides to a stop instead of stopping dead
-    controls.dampingFactor = 0.05;//glide 
-    controls.target.set(0, 0, 0); // the point the camera orbits around and keeps looking at
-    gui.add(controls, 'enabled').name('orbit camera (debug)'); // checkbox to switch the mouse control off
 
     scene = new THREE.Scene();
     scene.background = new THREE.Color(Colors.background);
@@ -392,7 +436,7 @@ const init = async () => {
     // set the bias to reduce shadow acne (self-shadowing artifacts), an error margin to keep our court lit.
     light.shadow.bias = 0.001;
 
-
+    
 
     const hoop = createHoop();
     scene.add(hoop);
@@ -416,8 +460,20 @@ const init = async () => {
 
     ({ world, ballBody, ballCollider, sensors, eventQueue } = createPhysics());
 
+    const fov = 75;
+    const aspect = 2;  // the canvas default
+    const near = 0.1;
 
-    motionDetection(handlePose); // start the motion detection and shot counting, handlePose gets the arms every frame
+    const far = 100;
+    camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
+
+    controls = new OrbitControls(camera, renderer.domElement); // moves `camera`, listens for mouse input on the canvas
+    controls.enableDamping = true; // the movement glides to a stop instead of stopping dead
+    controls.dampingFactor = 0.05;//glide
+    controls.target.set(0, Court.Hoop.rimHeight, Court.Hoop.rimZ); // the point the camera looks at and orbits around: the rim
+    placeCamera(true); // stand at the current spot's camera position, so the first frame already looks at the rim
+    gui.add(controls, 'enabled').name('orbit camera (debug)'); // checkbox to switch the mouse control off
+
 
     window.addEventListener('keydown', (event) => {
         if (event.code === 'Space' && !event.repeat) startMeter();
@@ -432,11 +488,30 @@ const handleSpotChange = () => {
     const spot = Court.spots[stats.currentSpot];
     playerMesh.position.set(spot.x, 0, spot.z);
     playerMesh.rotation.y = spot.facing;
+    placeCamera(); // move the camera to the new player position
+};
+
+const placeCamera = (menu = false) => {
+    if (menu) {
+        // menu view: fixed in the world, not tied to the playe
+        const { position, lookAt } = Camera.menu;
+        camera.position.set(position.x, position.y, position.z);
+        controls.target.set(lookAt.x, lookAt.y, lookAt.z);
+    } else {
+        // game view: in the player's own space, so it turns with the player, looking at the rim
+        playerMesh.updateMatrixWorld();
+        const offset = Camera.offsets[stats.currentSpot];
+        camera.position.copy(playerMesh.localToWorld(new THREE.Vector3(offset.x, offset.y, offset.z)));
+        controls.target.set(0, Court.Hoop.rimHeight, Court.Hoop.rimZ);
+    }
+
+    controls.update();
 };
 
 
 //HELPERS AND DEBUG
 function resizeRendererToDisplaySize(renderer) {
+    const canvas = renderer.domElement;   // each renderer measures its own canvas (game or menu)
     const pixelRatio = window.devicePixelRatio;
     const width = Math.floor(canvas.clientWidth * pixelRatio);
     const height = Math.floor(canvas.clientHeight * pixelRatio);
@@ -454,6 +529,20 @@ function makeAxisGrid(node, label, units) {
 
 
 //RENDER LOOP
+
+const menuRender = (time) => {
+    time *= 0.001;
+
+
+    if (resizeRendererToDisplaySize(menuRenderer)) {
+        const menuCanvas = menuRenderer.domElement;
+        menuCamera.aspect = menuCanvas.clientWidth / menuCanvas.clientHeight;
+        menuCamera.updateProjectionMatrix();
+    }
+
+    menuRenderer.render(menuScene, menuCamera);
+}
+
 const render = (time) => {
     time *= 0.001; //time in seconds
     const delta = Math.min(time - lastTime, 0.1);   // seconds since the last frame, capped
@@ -469,7 +558,6 @@ const render = (time) => {
     while (physicsTime >= physicsStep) {
         world.step(eventQueue);
         physicsTime -= physicsStep;// simulate the world in fixed-size steps, so the simulation is stable and deterministic
-
     }
 
     if (resizeRendererToDisplaySize(renderer)) {
@@ -504,6 +592,17 @@ const render = (time) => {
 }
 
 
+
+await motionDetection(handlePose);// start the motion detection and shot counting, handlePose gets the arms every frame
+document.getElementById('loading__container').style.visibility = 'hidden';   // setup finished: hide the loading screen
+track.play(); // start the music
+
+
+menuInit(); // setup the menu buttons and canvas
+await menuRenderer.init(); //initialize the menu renderer and wait for it to be ready
+menuRenderer.setAnimationLoop(menuRender); //loop the animation loop and call the render function for each frame
+
 init();
 await renderer.init(); //initialize the renderer and wait for it to be ready
+
 renderer.setAnimationLoop(render); //loop the animation loop and call the render function for each frame

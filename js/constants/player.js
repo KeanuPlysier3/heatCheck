@@ -55,4 +55,11 @@ Player.poses = {
         left: { shoulderX: 0, shoulderZ: 0, elbowX: 0, elbowZ: 0 },
         right: { shoulderX: 0, shoulderZ: 0, elbowX: 0, elbowZ: 0 },
     },
+
+    // the main menu: one hand on the hip, the other pointing at the sky
+    // (shoulderZ swings the arm sideways: positive = the left arm out, negative = the right arm out)
+    menu: {
+        left: { shoulderX: 0, shoulderZ: 40, elbowX: -20, elbowZ: -110 },
+        right: { shoulderX: 0, shoulderZ: -165, elbowX: 0, elbowZ: -10 },
+    },
 };

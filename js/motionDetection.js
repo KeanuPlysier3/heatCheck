@@ -111,7 +111,7 @@ const drawKeypoints = (poses) => {
     poses[0].keypoints.forEach((keypoint) => {
         if (keypoint.score < minScore) return;
         ctx.beginPath();
-        ctx.arc(keypoint.x, keypoint.y, 10, 0, Math.PI * 2); // a full circle, radius 10 px
+        ctx.arc(keypoint.x, keypoint.y, 15, 0, Math.PI * 2); // a full circle, radius 10 px
         ctx.fill();
     });
 }
@@ -161,8 +161,8 @@ const measureArm = (pose, side) => {
 // draws line between shoulder, elbow and wrist.
 const drawArm = (arm) => {
     if (!arm) return;
-    ctx.strokeStyle = arm.released ? 'limegreen' : arm.loaded ? 'blue' : 'white';
-    ctx.lineWidth = 6;
+    ctx.strokeStyle = arm.released ? 'limegreen' : arm.loaded ? 'blue' : 'yellow';
+    ctx.lineWidth = 10;
     ctx.beginPath();
     ctx.moveTo(arm.shoulder.x, arm.shoulder.y);
     ctx.lineTo(arm.elbow.x, arm.elbow.y);
@@ -202,11 +202,11 @@ const updateShot = (side, arm, now) => {
 const shotReleased = (time, side) => {
     shotState.count++;
     console.log(`SHOT #${shotState.count} with the ${side} arm at ${(time / 1000).toFixed(2)} s`);
-
+    
     const banner = document.querySelector('#shotBanner');
-    banner.hidden = false;
+
     clearTimeout(banner.hideTimer);
-    banner.hideTimer = setTimeout(() => { banner.hidden = true; }, 600); // show SHOT! for 0.6 s
+
 };
 
 // the live numbers under the video, one line per arm, plus the shot count

@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { Court } from '../constants/court';
-import { Colors } from '../constants/colors';
+import { Colors, SelfLight } from '../constants/colors';
 import { Outline } from '../constants/outline';
 import { createOutlineMesh } from '../helpers/outline';
 import { createThreePointLine } from './threePointLine';
@@ -12,7 +12,7 @@ export const createCourt = () => {
 
     // the area around the court, one slab-thickness below the playing surface
     const surroundGeometry = new THREE.PlaneGeometry(Court.surroundWidth, Court.surroundDepth);
-    const surroundMaterial = new THREE.MeshPhongMaterial({ color: Colors.surround });
+    const surroundMaterial = new THREE.MeshPhongMaterial({ color: Colors.surround, emissive: Colors.surround, emissiveIntensity: SelfLight });
     const surroundMesh = new THREE.Mesh(surroundGeometry, surroundMaterial);
     surroundMesh.rotation.x = Math.PI * -.5; // a plane stands upright by default, lay it flat
     surroundMesh.position.y = -Court.thickness; // lower than the playing surface, two surfaces at the same height would flicker
@@ -27,6 +27,9 @@ export const createCourt = () => {
     const floorMaterial = new THREE.MeshPhongMaterial({
         map: floorTexture,          // the grain, cracks, speckles
         color: Colors.court,   // tints all of it teal
+        emissive: Colors.court,        // the same teal, given off by the surface itself
+        emissiveMap: floorTexture,     // so the grain and cracks stay visible in the glow
+        emissiveIntensity: SelfLight,
     });
 
     // the playing surface: a slab, a box is already flat so it needs no rotation

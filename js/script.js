@@ -16,7 +16,48 @@ import { createPhysics } from './physics.js';
 import { sensorOutput } from './physics.js';
 import { Meter } from './constants/meter.js';
 import { Camera } from './constants/camera.js';
+import { createMenu, hideMenu, showMenu } from './menu.js';
+import { resizeRendererToDisplaySize } from './helpers/resizeRenderer.js';
 import { math } from '@tensorflow/tfjs-core';
+
+//FLAGS
+// the game's state lives in these variables. R = a function reads it, W = a function changes it.
+// change them only in the functions listed here, so there is one place to look when something goes wrong
+
+// which game is being played: 'menu' | 'freePlay' | 'aroundTheWorld' | (more modes later)
+//   W: handleFreeplayClick, startAroundTheWorld, the Home button in setEvents
+//   R: checkMadeShot (only Around the World counts the 15 makes)
+let mode = 'menu';
+
+// where the current run is: 'idle' (nothing started) | 'countdown' | 'playing' | 'finished'
+//   W: handleFreeplayClick, startAroundTheWorld, endTimer, the Home button in setEvents
+//   R: startMeter (a shot can only be started while 'playing'), checkMadeShot
+let runPhase = 'idle';
+
+// where the current shot, and so the ball, is:
+//   'idle'      the ball is in the hand
+//   'aiming'    the ball is in the hand and the meter is filling
+//   'flying'    the ball is in the air and the shot is not decided yet
+//   'landing'   missed: the ball keeps bouncing until it touches the floor
+//   'shrinking' the ball is shrinking away, on its way back to the hand
+//   W: startMeter (idle > aiming), resetMeter (aiming > idle), shoot (> flying),
+//      shotReset (> landing or shrinking), updateBallReturn (landing > shrinking > idle)
+//   R: startMeter, releaseMeter, updateMeter, shoot, checkMadeShot, updateBallReturn, render,
+//      and ballIsHeld, which shoot and render use
+let shotPhase = 'idle';
+
+// true while the ball sits in the hand: before the shot, and while the meter fills
+const ballIsHeld = () => shotPhase === 'idle' || shotPhase === 'aiming';
+
+// whether the ball has passed the top sensor on its way through the hoop
+//   W: shoot (false for every new shot), checkMadeShot (true at the top sensor, false again after a make)
+//   R: checkMadeShot
+let passedTop = false;
+
+// whether the player is in the air
+//   W: startJump (true), updateJump (false when the feet are back on the floor)
+//   R: startJump, updateJump
+let jumping = false;
 
 let canvas;
 let renderer;
@@ -29,26 +70,16 @@ let controls;
 let joints; // the player's shoulder and elbow pivots, filled in init
 let playerMesh; // the player's y position, used for jumping
 
-let menuPlayerMesh; // the player's mesh in the menu, used to rotate it
+let stopWatch = 0;   // seconds elapsed in the current run
+let timeInterval;    // the id of the stopwatch's setInterval, so endTimer can stop it
+
 let world, ballBody, ballCollider, sensors, eventQueue; // physics world, filled in init
 const physicsStep = 1 / 60;   // seconds per physics step
 let lastTime = 0;
 let physicsTime = 0;    // real time that hasn't been simulated yet
 
-let menuRenderer;
-
-let menuCamera;
-let menuScene;
-
-let menu;
 let meterValue = 0;       // 0 = empty, 1 = full
-let meterActive = false;  // true while a shot is being loaded
 let meterElement, meterFill, meterGreen; // the bar's elements, filled in init
-
-let passedTop = false; // whether the ball has passed the top sensor
-let shotInProgress = false; // whether a shot is in progress, used to prevent multiple makes from one shot
-
-let shotArmed = false; // whether the shot is armed and ready to be taken
 
 let stats = {
     shots: 0,
@@ -58,26 +89,29 @@ let stats = {
     currentSpot: 0,
     nextSpot: 3,
     spotProgress: 0,
+    AroundTheWorldShots: 0,
 };
 
 const track = new Audio('music/lofi.mp3');
 track.volume = 0.3; // set the volume to 30% of the original
 
 
+
 const swish = new Audio('soundEffects/swish1.mp3');
 swish.volume = 0.7; // set the volume to 70% of the original
 
 const greenGiant = new Audio('soundEffects/GreenGiant.mp3');
-greenGiant.volume = 0.2;
+greenGiant.volume = 0.02;
 
-let ballState = "held"; // held: in the hand. flying: a shot in the air. landing: shot decided, waiting for the floor. shrinking: on its way back
 let ballScale = 1;      // the ball's size on screen: 1 = full size, 0 = gone
 let landingTime = 0;    // seconds spent waiting for the ball to reach the floor
 
 const gui = new GUI();
+gui.close();                                // start collapsed: only the title bar is left
+gui.domElement.style.top = 'auto';          // lil-gui sits in the top right corner by default, which is where the timer is
+gui.domElement.style.bottom = '2%';         // so it goes to the bottom right instead
 
-let jumping = false
-let jumpVelocity = 0;
+let jumpVelocity = 0;   // how fast the player is moving up (negative: down) during a jump
 
 let targetPose = Player.poses.default;
 
@@ -108,8 +142,7 @@ const handlePose = (arms) => {
     if (loaded) {
         targetPose = Player.poses.loaded;
         poseUntil = now + poseHold.loaded;      // restart the clock on every loaded frame
-        shotArmed = true; // the shot is armed and ready to be taken
-        if (!shotInProgress) startMeter(); // start the meter when the arms are loaded
+        startMeter(); // start the meter when the arms are loaded (it checks by itself that a shot is possible)
         return;
     }
 
@@ -123,10 +156,7 @@ const handlePose = (arms) => {
     if (released) {
         targetPose = Player.poses.release;
         poseUntil = now + poseHold.release;
-        if (shotArmed) {
-            shotArmed = false;
-            releaseMeter(); // take the shot when the arms are released
-        }
+        releaseMeter(); // take the shot when the arms are released (it only does something while aiming)
         return;
     }
 
@@ -172,19 +202,18 @@ const updateJump = (delta) => {
 
 const resetMeter = () => {
     meterValue = 0;
-    meterActive = false;
+    if (shotPhase === 'aiming') shotPhase = 'idle';   // the arms went back down: cancel the aim
 };
 
 const startMeter = () => {
-    if (meterActive) return;   // already filling
-    if (ballState !== 'held') return;
-    meterActive = true;
+    if (runPhase !== 'playing') return;   // the menu, the countdown and the after game screen do not allow shots
+    if (shotPhase !== 'idle') return;     // already filling, or the ball is not in the hand
+    shotPhase = 'aiming';
     meterValue = 0;
 };
 
 const releaseMeter = () => {
-    if (!meterActive) return;  // nothing to release
-    meterActive = false;
+    if (shotPhase !== 'aiming') return;  // nothing to release
     console.log('released at', meterValue.toFixed(2));
 
     const greenBottom = Meter.greenCentre - Meter.greenWidth / 2;
@@ -208,19 +237,18 @@ const releaseMeter = () => {
 };
 
 const updateMeter = (delta) => {
-    if (meterActive) {
+    if (shotPhase === 'aiming') {
         meterValue = Math.min(1, meterValue + delta / Meter.duration);   // stops at the top
     }
-    meterElement.hidden = !meterActive;
+    meterElement.hidden = shotPhase !== 'aiming';
     meterFill.style.height = meterValue * 100 + '%';
 };
 
 
 const shoot = (power = 1) => {
-    if (ballState !== 'held') return; //avoid shooting if the ball is already flying
+    if (!ballIsHeld()) return; //avoid shooting if the ball is already flying
     stats.shots++;
-    ballState = "flying";
-    shotInProgress = true;
+    shotPhase = 'flying';
     passedTop = false;
     ballBody.setBodyType(RAPIER.RigidBodyType.Dynamic, true); // make the ball dynamic so it can be affected by physics
 
@@ -252,7 +280,7 @@ const shoot = (power = 1) => {
 // this only starts the sequence, updateBallReturn does the work frame by frame
 const shotReset = (made) => {
     const shrinkDuration = made ? Basketball.makeShrinkTime : Basketball.shrinkTime;
-    ballState = (made || ballNearFloor()) ? "shrinking" : "landing";
+    shotPhase = (made || ballNearFloor()) ? 'shrinking' : 'landing';
     landingTime = 0;
 };
 
@@ -262,17 +290,17 @@ const ballNearFloor = () => ballBody.translation().y <= Basketball.radius + 0.05
 
 // runs every frame: moves the ball through landing → shrinking → held, and grows it back in the hand
 const updateBallReturn = (delta) => {
-    if (ballState === "landing") {
+    if (shotPhase === 'landing') {
         // the ball keeps bouncing as a normal physics ball until it touches the floor
         landingTime += delta;
-        if (ballNearFloor() || landingTime > Basketball.landingWait) ballState = "shrinking";
-    } else if (ballState === "shrinking") {
+        if (ballNearFloor() || landingTime > Basketball.landingWait) shotPhase = 'shrinking';
+    } else if (shotPhase === 'shrinking') {
         ballScale = Math.max(0, ballScale - delta / Basketball.shrinkTime); // from 1 to 0 in shrinkTime seconds
         if (ballScale === 0) {
-            ballState = "held"; // from the next frame on the ball follows the hand again
+            shotPhase = 'idle'; // from the next frame on the ball follows the hand again
             ballBody.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased, true);
         }
-    } else if (ballState && ballScale < 1) {
+    } else if (ballScale < 1) {
         ballScale = Math.min(1, ballScale + delta / Basketball.growTime); // grow back in the hand
     }
     //scale whole group.
@@ -282,11 +310,18 @@ const updateBallReturn = (delta) => {
 const checkMadeShot = (topSensor, bottomSensor) => {
     if (topSensor) passedTop = true;
 
-    if (bottomSensor && passedTop && shotInProgress) {
+    if (bottomSensor && passedTop && shotPhase === 'flying') {
         passedTop = false;
         swish.currentTime = 0;
         swish.play();
-        shotInProgress = false;
+
+        if (mode === 'aroundTheWorld' && runPhase === 'playing' && stats.AroundTheWorldShots < 15) {
+            if (stats.AroundTheWorldShots === 14) {
+                endTimer();
+            }
+            stats.AroundTheWorldShots++;
+        }
+
         stats.madeShots++;
         stats.spotProgress++;
         stats.streak++;
@@ -296,8 +331,7 @@ const checkMadeShot = (topSensor, bottomSensor) => {
 
 
     const onFloor = ballBody.translation().y <= Basketball.radius + 0.02;
-    if (onFloor && shotInProgress) {
-        shotInProgress = false;
+    if (onFloor && shotPhase === 'flying') {
         stats.streak = 0;
         onMiss();
     }
@@ -342,56 +376,122 @@ const updateStatsDisplay = () => {
     shootingPercentageElement.textContent = stats.shootingPercentage.toFixed(2) + '%';
 };
 
-//MENU
-const handleFreeplayClick = () => {
-    document.querySelector('#menu').hidden = true;
-    menuRenderer.setAnimationLoop(null); // stop the menu render loop
-    menu.style.display = 'none';
-    placeCamera(); // move the camera to the current spot's position
-    
 
+//GAME MODES
+const handleFreeplayClick = () => {
+    mode = 'freePlay';
+    runPhase = 'playing';   // free play has no countdown
+    document.getElementById('timer').hidden = true;   // and no stopwatch
+    hideMenu();
+    placeCamera(); // move the camera to the current spot's position
+};
+
+const handleAroundTheWorldClick = () => {
+    hideMenu();
+    placeCamera(); // move the camera to the current spot's position
+    startAroundTheWorld();
+};
+
+
+
+const startAroundTheWorld = async () => {
+    mode = 'aroundTheWorld';
+    runPhase = 'countdown';
+    await showCountDown(3);
+    runPhase = 'playing';
+    document.getElementById('timer').hidden = false;   // the stopwatch shows up when the run starts
+
+    startTimer();
+    document.getElementById('timerValue').textContent = '00:00';
+
+    stats.AroundTheWorldShots = 0;
+    stats.spotProgress = 0;
+    stats.currentSpot = 0;
+    stats.nextSpot = 0;
+    stats.streak = 0;
+    stats.shots = 0;
+    stats.madeShots = 0;
+    stats.shootingPercentage = 0;
+
+    updateStatsDisplay();
 }
 
-//SETUP
-const menuInit = () => {    
-    const menuButtons = document.querySelector('#menu__buttons');
-    menu = document.querySelector('#menu');
-    const freeplayButton = document.querySelector('#freePlayBtn');
-    const menuCanvas = document.querySelector('#menu__canvas');
 
-    freeplayButton.addEventListener('click', handleFreeplayClick);
+const endTimer = () => {
+    clearInterval(timeInterval);
+    const currentTime = stopWatch;
+    console.log(`Time's up! Final time: ${currentTime} seconds`);
+    stopWatch = 0;
+    runPhase = 'finished';
 
-    menuRenderer = new THREE.WebGPURenderer({
-        canvas: menuCanvas,   // the option has to be called "canvas"; a bare menuCanvas would be ignored
-        alpha: true,
-        antialias: true
+    document.getElementById('afterGame').hidden = false; // show the after game screen when the run ends
+    document.getElementById('yourTime').textContent = `Your Time: ${Math.floor(currentTime / 60)}:${(currentTime % 60).toString().padStart(2, '0')}`;
+   
+}
+
+
+const startTimer = () => {
+    stats.AroundTheWorldShots = 0;
+    timeInterval = setInterval(() => {
+        stopWatch++;
+        const minutes = Math.floor(stopWatch / 60);
+        const seconds = stopWatch % 60;
+        const formattedTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        document.getElementById('timerValue').textContent = formattedTime;
+    }, 1000);
+}
+
+
+
+const showCountDown = async (seconds) => {
+    const countdownElement = document.querySelector('#countdown');
+    const nextNumber = seconds - 1;
+    countdownElement.textContent = seconds;
+    countdownElement.hidden = false;
+    // restart the pop-in animation for every number (changing the text alone does not restart a css animation)
+    countdownElement.style.animation = 'none';
+    void countdownElement.offsetWidth;
+    countdownElement.style.animation = '';
+
+    if (nextNumber > 0) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        await showCountDown(nextNumber);
+    } else {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        countdownElement.hidden = true;
+    }
+}
+
+
+
+//EVENTS
+// every button and key listener of the game, set up once (call it once: calling it twice would double every click)
+const setEvents = () => {
+    // main menu: the two game modes
+    document.querySelector('#freePlayBtn').addEventListener('click', handleFreeplayClick);
+    document.querySelector('#aroundTheWorldBtn').addEventListener('click', handleAroundTheWorldClick);
+
+    // after game screen: back to the menu, or run it again
+    document.getElementById('homeBtn').addEventListener('click', () => {
+        document.getElementById('afterGame').hidden = true;
+        document.getElementById('timer').hidden = true;
+        mode = 'menu';
+        runPhase = 'idle';
+        showMenu();
+    });
+    document.getElementById('retry').addEventListener('click', () => {
+        document.getElementById('afterGame').hidden = true;
+        startAroundTheWorld();
     });
 
-    menuRenderer.shadowMap.enabled = true; // enable shadow maps
-
-    menuScene = new THREE.Scene();
-
-    
-    menuCamera = new THREE.PerspectiveCamera(75, menuCanvas.clientWidth / menuCanvas.clientHeight, 0.1, 100);
-    
-
-
-    const player = createPlayer();
-    menuPlayerMesh = player.player;
-    menuPlayerMesh.position.set(0, 0, 0);
-    menuPlayerMesh.rotation.y = Math.PI; // face the camera
-
-    menuScene.add(menuPlayerMesh);
-
-
-
-
-    // the player is turned to face -z, so the camera stands on the -z side, level with their chest, looking straight at them
-    const chestHeight = Player.height * 0.55;
-    menuCamera.position.set(0, chestHeight, -2);
-    menuCamera.lookAt(0, chestHeight, 0);
-    // no render call here: the renderer is not initialised yet, the animation loop in the bottom of the file draws it
-}
+    // the shot meter: hold space to fill it, let go to shoot
+    window.addEventListener('keydown', (event) => {
+        if (event.code === 'Space' && !event.repeat) startMeter();
+    });
+    window.addEventListener('keyup', (event) => {
+        if (event.code === 'Space') releaseMeter();
+    });
+};
 
 const init = async () => {
 
@@ -415,7 +515,7 @@ const init = async () => {
     scene.background = new THREE.Color(Colors.background);
 
 
-    const light = new THREE.DirectionalLight(0xffffff, 14);
+    const light = new THREE.DirectionalLight(0xffffff, 15);
     light.position.set(10, 20, 20);
     scene.add(light);
     light.castShadow = true; // enable shadows for this light
@@ -436,7 +536,7 @@ const init = async () => {
     // set the bias to reduce shadow acne (self-shadowing artifacts), an error margin to keep our court lit.
     light.shadow.bias = 0.001;
 
-    
+
 
     const hoop = createHoop();
     scene.add(hoop);
@@ -470,17 +570,14 @@ const init = async () => {
     controls = new OrbitControls(camera, renderer.domElement); // moves `camera`, listens for mouse input on the canvas
     controls.enableDamping = true; // the movement glides to a stop instead of stopping dead
     controls.dampingFactor = 0.05;//glide
-    controls.target.set(0, Court.Hoop.rimHeight, Court.Hoop.rimZ); // the point the camera looks at and orbits around: the rim
-    placeCamera(true); // stand at the current spot's camera position, so the first frame already looks at the rim
+    // start already in the menu pose, so the first frame does not swoop in from the origin
+    camera.position.set(Camera.menu.position.x, Camera.menu.position.y, Camera.menu.position.z);
+    controls.target.set(Camera.menu.lookAt.x, Camera.menu.lookAt.y, Camera.menu.lookAt.z);
+    placeCamera(true); // the goal is the menu pose too, so there is nothing to glide yet
     gui.add(controls, 'enabled').name('orbit camera (debug)'); // checkbox to switch the mouse control off
 
 
-    window.addEventListener('keydown', (event) => {
-        if (event.code === 'Space' && !event.repeat) startMeter();
-    });
-    window.addEventListener('keyup', (event) => {
-        if (event.code === 'Space') releaseMeter();
-    });
+    setEvents(); // hook up every button and key in one place
 }
 
 const handleSpotChange = () => {
@@ -491,37 +588,33 @@ const handleSpotChange = () => {
     placeCamera(); // move the camera to the new player position
 };
 
+// where the camera is heading: placeCamera sets it, smoothCamera moves the camera towards it every frame
+const cameraGoal = { position: new THREE.Vector3(), target: new THREE.Vector3() };
+
 const placeCamera = (menu = false) => {
     if (menu) {
-        // menu view: fixed in the world, not tied to the playe
+        // menu view: fixed in the world, not tied to the player
         const { position, lookAt } = Camera.menu;
-        camera.position.set(position.x, position.y, position.z);
-        controls.target.set(lookAt.x, lookAt.y, lookAt.z);
+        cameraGoal.position.set(position.x, position.y, position.z);
+        cameraGoal.target.set(lookAt.x, lookAt.y, lookAt.z);
     } else {
         // game view: in the player's own space, so it turns with the player, looking at the rim
         playerMesh.updateMatrixWorld();
         const offset = Camera.offsets[stats.currentSpot];
-        camera.position.copy(playerMesh.localToWorld(new THREE.Vector3(offset.x, offset.y, offset.z)));
-        controls.target.set(0, Court.Hoop.rimHeight, Court.Hoop.rimZ);
+        cameraGoal.position.copy(playerMesh.localToWorld(new THREE.Vector3(offset.x, offset.y, offset.z)));
+        cameraGoal.target.set(0, Court.Hoop.rimHeight, Court.Hoop.rimZ);
     }
+};
 
-    controls.update();
+// glides the camera and the point it looks at towards the goal, called every frame
+const smoothCamera = (delta) => {
+    const t = 1 - Math.exp(-3 * delta);   // 3 = speed, bigger is snappier. the exp makes it independent of the framerate
+    camera.position.lerp(cameraGoal.position, t);
+    controls.target.lerp(cameraGoal.target, t);
 };
 
 
 //HELPERS AND DEBUG
-function resizeRendererToDisplaySize(renderer) {
-    const canvas = renderer.domElement;   // each renderer measures its own canvas (game or menu)
-    const pixelRatio = window.devicePixelRatio;
-    const width = Math.floor(canvas.clientWidth * pixelRatio);
-    const height = Math.floor(canvas.clientHeight * pixelRatio);
-    const needResize = canvas.width !== width || canvas.height !== height;
-    if (needResize) {
-        renderer.setSize(width, height, false);
-    }
-    return needResize;
-}
-
 function makeAxisGrid(node, label, units) {
     const helper = new AxisGridHelper(node, units);
     gui.add(helper, 'visible').name(label); // a checkbox bound to helper.visible, shown with this label
@@ -530,19 +623,6 @@ function makeAxisGrid(node, label, units) {
 
 //RENDER LOOP
 
-const menuRender = (time) => {
-    time *= 0.001;
-
-
-    if (resizeRendererToDisplaySize(menuRenderer)) {
-        const menuCanvas = menuRenderer.domElement;
-        menuCamera.aspect = menuCanvas.clientWidth / menuCanvas.clientHeight;
-        menuCamera.updateProjectionMatrix();
-    }
-
-    menuRenderer.render(menuScene, menuCamera);
-}
-
 const render = (time) => {
     time *= 0.001; //time in seconds
     const delta = Math.min(time - lastTime, 0.1);   // seconds since the last frame, capped
@@ -550,7 +630,7 @@ const render = (time) => {
 
     physicsTime += delta;
 
-    if (ballState === 'held') {
+    if (ballIsHeld()) {
         const h = handPoint('right');
         ballBody.setNextKinematicTranslation(h);           // physics follows the hand
     }
@@ -566,6 +646,7 @@ const render = (time) => {
         camera.updateProjectionMatrix();
     }
 
+    smoothCamera(delta); // glide towards the camera goal set by placeCamera
     controls.update(); // DEBUG ONLY: needed every frame for the orbit camera's damping
 
 
@@ -598,9 +679,7 @@ document.getElementById('loading__container').style.visibility = 'hidden';   // 
 track.play(); // start the music
 
 
-menuInit(); // setup the menu buttons and canvas
-await menuRenderer.init(); //initialize the menu renderer and wait for it to be ready
-menuRenderer.setAnimationLoop(menuRender); //loop the animation loop and call the render function for each frame
+await createMenu(); // build the 3D menu and start drawing it (see menu.js)
 
 init();
 await renderer.init(); //initialize the renderer and wait for it to be ready

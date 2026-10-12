@@ -5,6 +5,7 @@ import { AxisGridHelper } from './classes/AxisGridHelper.js';
 import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'; // DEBUG ONLY, see the orbit camera block in init
 import { createCourt } from './objects/court';
+import { createEnvironment } from './environment';
 import { createPlayer } from './objects/player';
 import { Court } from './constants/court';
 import { createHoop } from './objects/hoop';
@@ -19,14 +20,16 @@ import { Camera } from './constants/camera.js';
 import { createMenu, hideMenu, showMenu } from './menu.js';
 import { resizeRendererToDisplaySize } from './helpers/resizeRenderer.js';
 import { math } from '@tensorflow/tfjs-core';
+import { draw } from '@tensorflow/tfjs-core/dist/ops/browser.js';
 
 //FLAGS
-let mode = 'menu';       // 'menu' | 'freePlay' | 'aroundTheWorld'
+let mode = 'menu';       // 'menu' | 'freePlay' | 'aroundTheWorld' | 'downtownCountdown'
 let runPhase = 'idle';   // 'idle' | 'countdown' | 'playing' | 'finished'
 let shotPhase = 'idle';  // 'idle' | 'aiming' | 'flying' | 'landing' | 'shrinking'
 let passedTop = false;
 let jumping = false;
-
+let performanceMode = localStorage.getItem('performanceMode') ? localStorage.getItem('performanceMode') : 'false'; // if true, the environment is not drawn, to save performance
+let deepshotsOnly = false;
 // true while the ball sits in the hand
 const ballIsHeld = () => shotPhase === 'idle' || shotPhase === 'aiming';
 
@@ -43,6 +46,7 @@ let playerMesh; // the player's y position, used for jumping
 
 let stopWatch = 0;   // seconds elapsed in the current run
 let timeInterval;    // the id of the stopwatch's setInterval, so endTimer can stop it
+let countdownTimeout; // the id of the 3-2-1 countdown's current setTimeout, so goToMenu can stop it
 
 let world, ballBody, ballCollider, sensors, eventQueue; // physics world, filled in init
 const physicsStep = 1 / 60;   // seconds per physics step
@@ -53,10 +57,12 @@ let meterValue = 0;       // 0 = empty, 1 = full
 let meterElement, meterFill, meterGreen; // the bar's elements, filled in init
 
 let stats = {
+    points: 0,
     shots: 0,
     madeShots: 0,
     shootingPercentage: 0,
     streak: 0,
+    hotstreak: false,
     currentSpot: 0,
     nextSpot: 3,
     spotProgress: 0,
@@ -64,7 +70,7 @@ let stats = {
 };
 
 const track = new Audio('music/lofi.mp3');
-track.volume = 0.3; // set the volume to 30% of the original
+track.volume = 0.07; // set the volume to 10% of the original
 
 
 
@@ -93,6 +99,7 @@ const poseHold = {
     release: 300,
 };
 let poseUntil = 0; // the current pose is kept until this time
+let jumpDelay = null; // the jump waiting to start (a setTimeout id), or null when none is waiting
 
 const handlePose = (arms) => {
     const now = performance.now();
@@ -106,6 +113,8 @@ const handlePose = (arms) => {
         targetPose = Player.poses.default;
         poseUntil = now + poseHold.default;
         resetMeter(); // reset the meter when the arms are back to default
+        clearTimeout(jumpDelay); // the arms went back down before the jump started: cancel it
+        jumpDelay = null;
 
         return;
     }
@@ -120,8 +129,16 @@ const handlePose = (arms) => {
     if (rising && targetPose === Player.poses.loaded) {
         targetPose = Player.poses.release;   // start the swing early instead of waiting for a full release
         poseUntil = now + poseHold.release;
-        startJump(); // jump when the arms are rising
-        return;
+
+        // jump a moment after the arms start rising. only one timer at a time: this runs on pose frames,
+        // and every frame would otherwise start its own jump
+        if (!jumping && jumpDelay === null) {
+            jumpDelay = setTimeout(() => {
+                jumpDelay = null; // done, a new jump may be planned later
+                startJump();
+            }, 100); // wait 200 ms before jumping
+        }
+
     }
 
     if (released) {
@@ -179,6 +196,13 @@ const resetMeter = () => {
 const startMeter = () => {
     if (runPhase !== 'playing') return;   // the menu, the countdown and the after game screen do not allow shots
     if (shotPhase !== 'idle') return;     // already filling, or the ball is not in the hand
+
+    if (mode === "freePlay" && deepshotsOnly || mode === 'downtownCountdown' && stats.hotstreak) {
+        drawGreen(0.075); // the green zone is smaller during a hot streak   
+    }
+    else {
+        drawGreen(Meter.greenWidth); // the green zone is normal size
+    }
     shotPhase = 'aiming';
     meterValue = 0;
 };
@@ -198,8 +222,19 @@ const releaseMeter = () => {
     if (shotPhase !== 'aiming') return;  // nothing to release
     console.log('released at', meterValue.toFixed(2));
 
-    const greenBottom = Meter.greenCentre - Meter.greenWidth / 2;
-    const greenTop = Meter.greenCentre + Meter.greenWidth / 2;
+    //     duration: 1.0,      // seconds to fill from 0 to 1
+    // greenCentre: 0.75,  // where the green zone sits
+    // greenWidth: 0.15,   // its size: the forgiving buffer from your plan, in one value
+    // maxError: 0.25,     // how wrong the worst release is
+
+    let greenBottom, greenTop;
+    if (mode === 'downtownCountdown' && stats.hotstreak) {
+        greenBottom = Meter.greenCentre - .075 / 2;
+        greenTop = Meter.greenCentre + .075 / 2;
+    } else {
+        greenBottom = Meter.greenCentre - Meter.greenWidth / 2;
+        greenTop = Meter.greenCentre + Meter.greenWidth / 2;
+    }
 
     let power = 1;                                                         // 1 = the perfect shot
     if (meterValue < greenBottom) {
@@ -248,7 +283,17 @@ const shoot = (power = 1) => {
     const distanceZ = rim.z - start.z;
 
     const horizontal = Math.hypot(distanceX, distanceZ);   // flat distance from the hand to the rim
-    const entryAngle = THREE.MathUtils.degToRad(55);       // how steeply the ball drops into the rim
+
+    let entryAngle;
+    
+    ballBody.setLinearDamping(Basketball.linearDamping);
+    if (mode === 'downtownCountdown' && stats.hotstreak || mode === 'freePlay' && deepShotsOnly) {
+         entryAngle = THREE.MathUtils.degToRad(45);  
+         ballBody.setLinearDamping(0);     // how steeply the ball drops into the rim
+         console.log('high arc');
+    } else {
+         entryAngle = THREE.MathUtils.degToRad(55);       // how steeply the ball drops into the rim
+    }
     const time = Math.sqrt(2 * (horizontal * Math.tan(entryAngle) + distanceY) / gravity);
 
     const velocityX = distanceX / time;
@@ -306,9 +351,16 @@ const checkMadeShot = (topSensor, bottomSensor) => {
             stats.AroundTheWorldShots++;
         }
 
+        // points are the score, madeShots only counts makes for the shooting percentage
         stats.madeShots++;
-        stats.spotProgress++;
         stats.streak++;
+        if (mode === 'downtownCountdown' && stats.hotstreak) {
+            stats.points += 4; // the deep shot
+        }
+        else {
+            stats.points += 2; // a normal make
+            stats.spotProgress++;
+        }
         onMake();
         return
     }
@@ -322,6 +374,15 @@ const checkMadeShot = (topSensor, bottomSensor) => {
 };
 
 const onMiss = () => {
+    drawGreen(Meter.greenWidth);
+    if (mode === 'downtownCountdown') stats.hotstreak = false;
+
+    if (mode !== 'freeplay' && !deepshotsOnly){
+    const spot = Court.spots[stats.currentSpot];
+    playerMesh.position.set(spot.x, 0, spot.z);
+    playerMesh.rotation.y = spot.facing;
+    placeCamera(); // move the camera to the current spot's position
+    }
     stats.shootingPercentage = stats.shots > 0 ? (stats.madeShots / stats.shots) * 100 : 0;
     fire.heat.value = 0;
     ballMaterial.color.set(Colors.basketball);
@@ -335,7 +396,12 @@ const onMake = () => {
     const p = ballBody.translation();
     const onFloor = p.y <= Basketball.radius + 0.02;
 
-    if (stats.spotProgress === 3) {
+    if (mode === 'downtownCountdown' && stats.streak >= 5) {
+        stats.hotstreak = true;
+        handleSpotChange();
+    }
+
+    if (stats.spotProgress === 3 && !stats.hotstreak) {
         stats.spotProgress = 0;
         handleSpotChange();
     }
@@ -352,17 +418,38 @@ const onMake = () => {
 //STATS DISPLAY
 const updateStatsDisplay = () => {
     const shotsElement = document.querySelector('#shots');
+    const pointsElement = document.querySelector('#points');
     const madeShotsElement = document.querySelector('#madeShots');
     const shootingPercentageElement = document.querySelector('#shootingPercentage');
 
     shotsElement.textContent = stats.shots;
+    pointsElement.textContent = stats.points;
     madeShotsElement.textContent = stats.madeShots;
     shootingPercentageElement.textContent = stats.shootingPercentage.toFixed(2) + '%';
 };
 
 
+// back to the main menu, from the after game screen or in the middle of a run
+const goToMenu = () => {
+    // stop every timer that could still change the game after leaving it
+    clearInterval(timeInterval);      // the stopwatch or the 60 second countdown of a run that is still going
+    clearTimeout(countdownTimeout);   // the 3-2-1: its promise never resolves now, so the run after the await never starts
+    clearTimeout(jumpDelay);          // a jump that was waiting to start
+    jumpDelay = null;
+    stopWatch = 0;
+    document.getElementById('countdown').hidden = true;
+    document.getElementById('afterGame').hidden = true;
+    document.getElementById('timer').hidden = true;
+    document.querySelector('#deepShotsOnly').hidden = true;
+    mode = 'menu';
+    runPhase = 'idle';
+    placeCamera(true); // glide back to the menu camera
+    showMenu();
+};
+
 //GAME MODES
 const handleFreeplayClick = () => {
+    document.querySelector('#deepShotsOnly').hidden = false;
     mode = 'freePlay';
     runPhase = 'playing';   // free play has no countdown
     document.getElementById('timer').hidden = true;   // and no stopwatch
@@ -371,12 +458,14 @@ const handleFreeplayClick = () => {
 };
 
 const handleAroundTheWorldClick = () => {
+    document.querySelector('#deepShotsOnly').hidden = true;
     hideMenu();
     placeCamera(); // move the camera to the current spot's position
     startAroundTheWorld();
 };
 
 const handleDowntownCountdownClick = () => {
+    document.querySelector('#deepShotsOnly').hidden = true;
     hideMenu();
     placeCamera(); // move the camera to the current spot's position
     startDowntownCountdown();
@@ -389,6 +478,15 @@ const startDowntownCountdown = async () => {
     runPhase = 'playing';
     document.getElementById('timer').hidden = false;   // the stopwatch shows up when the run starts
     startCountdownTimer(60); // 60 seconds countdown
+    stats.AroundTheWorldShots = 0;
+    stats.spotProgress = 0;
+
+    stats.nextSpot = 0;
+    stats.streak = 0;
+    stats.shots = 0;
+    stats.madeShots = 0;
+    stats.points = 0;
+    stats.shootingPercentage = 0;
 }
 
 
@@ -409,6 +507,7 @@ const startAroundTheWorld = async () => {
     stats.streak = 0;
     stats.shots = 0;
     stats.madeShots = 0;
+    stats.points = 0;
     stats.shootingPercentage = 0;
 
     updateStatsDisplay();
@@ -458,13 +557,13 @@ const endCountdownTimer = () => {
     clearInterval(timeInterval);
     const currentTime = stopWatch;
     console.log(`Time's up! Final time: ${currentTime} seconds`);
-    
+
     stopWatch = 0;
     runPhase = 'finished';
     document.getElementById('retry').hidden = true; // show the retry button for around the world
     document.getElementById('retry2').hidden = false; // show the retry button for downtown countdown
     document.getElementById('afterGame').hidden = false; // show the after game screen when the run ends
-    document.getElementById('yourTime').textContent = `Your score: ${stats.madeShots} (${stats.shootingPercentage.toFixed(2)}%)`;
+    document.getElementById('yourTime').textContent = `Your score: ${stats.points} (${stats.shootingPercentage.toFixed(2)}%)`;
 }
 
 const showCountDown = async (seconds) => {
@@ -477,14 +576,21 @@ const showCountDown = async (seconds) => {
     void countdownElement.offsetWidth;
     countdownElement.style.animation = '';
 
+    // the timeout's id is kept in countdownTimeout, so goToMenu can cancel the countdown
     if (nextNumber > 0) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => countdownTimeout = setTimeout(resolve, 1000));
         await showCountDown(nextNumber);
     } else {
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => countdownTimeout = setTimeout(resolve, 1000));
         countdownElement.hidden = true;
     }
 }
+
+const drawGreen = (width = Meter.greenWidth) => {
+    meterGreen.style.bottom = (Meter.greenCentre - width / 2) * 100 + '%';
+    meterGreen.style.height = width * 100 + '%';
+};
+
 
 
 
@@ -492,19 +598,36 @@ const showCountDown = async (seconds) => {
 // every button and key listener of the game, set up once (call it once: calling it twice would double every click)
 const setEvents = () => {
     // main menu: the two game modes
+    if (performanceMode === 'true') {
+        document.querySelector('#performanceModeCheckbox').checked = true;
+    }
+
+
+
     document.querySelector('#freePlayBtn').addEventListener('click', handleFreeplayClick);
     document.querySelector('#aroundTheWorldBtn').addEventListener('click', handleAroundTheWorldClick);
     document.querySelector('#downTownCountdownBtn').addEventListener('click', handleDowntownCountdownClick);
 
 
-    // after game screen: back to the menu, or run it again
-    document.getElementById('homeBtn').addEventListener('click', () => {
-        document.getElementById('afterGame').hidden = true;
-        document.getElementById('timer').hidden = true;
-        mode = 'menu';
-        runPhase = 'idle';
-        showMenu();
+
+    document.querySelector('#deepShotOnlyCheckbox').addEventListener('change', (event) => {
+        deepshotsOnly = event.target.checked;
+        console.log('Deep shots only is now', deepshotsOnly);
+        handleDeepshotsOnly();
     });
+
+    document.querySelector('#performanceModeCheckbox').addEventListener('change', (event) => {
+        performanceMode = event.target.checked ? 'true' : 'false';   // keep it a string, like at line 31
+        localStorage.setItem('performanceMode', performanceMode);
+        console.log('Performance mode is now', performanceMode);
+        window.location.reload(); // reload the page to apply the change
+    });
+
+    // in game: back to the menu at any moment
+    document.getElementById('menuBtn').addEventListener('click', goToMenu);
+
+    // after game screen: back to the menu, or run it again
+    document.getElementById('homeBtn').addEventListener('click', goToMenu);
 
     document.getElementById('retry').addEventListener('click', () => {
         document.getElementById('afterGame').hidden = true;
@@ -531,10 +654,10 @@ const setEvents = () => {
 };
 
 const init = async () => {
-
     meterElement = document.querySelector('#meter');
     meterGreen = document.querySelector('#meterGreen');
     meterFill = document.querySelector('#meterFill');
+    drawGreen(Meter.greenWidth); // set the green zone to its default size
 
     meterGreen.style.bottom = (Meter.greenCentre - Meter.greenWidth / 2) * 100 + '%';
     meterGreen.style.height = Meter.greenWidth * 100 + '%';
@@ -583,6 +706,11 @@ const init = async () => {
     scene.add(court);
     makeAxisGrid(court, 'court', 15);
 
+    if (performanceMode === 'false') {
+        const environment = createEnvironment();
+        scene.add(environment);
+    }
+
 
     const player = createPlayer();
     playerMesh = player.player; // the player's y position, used for jumping
@@ -617,12 +745,35 @@ const init = async () => {
     setEvents(); // hook up every button and key in one place
 }
 
+const handleDeepshotsOnly = () => {
+    let spot;
+    if (deepshotsOnly) {
+        spot = Court.spots[5];
+        playerMesh.position.set(spot.x, 0, spot.z);
+        playerMesh.rotation.y = spot.facing;
+        placeCamera();
+    } else {
+        spot = Court.spots[stats.currentSpot];
+        playerMesh.position.set(spot.x, 0, spot.z);
+        playerMesh.rotation.y = spot.facing;
+        placeCamera();
+    }
+};
+
 const handleSpotChange = () => {
-    stats.currentSpot = (stats.currentSpot + 1) % Court.spots.length;   // 0, 1, 2, 3, 4, then 0 again
-    const spot = Court.spots[stats.currentSpot];
-    playerMesh.position.set(spot.x, 0, spot.z);
-    playerMesh.rotation.y = spot.facing;
-    placeCamera(); // move the camera to the new player position
+    if (  mode==="freePlay" && deepshotsOnly || mode === 'downtownCountdown' && stats.hotstreak) {
+        const spot = Court.spots[5];
+        playerMesh.position.set(spot.x, 0, spot.z);
+        playerMesh.rotation.y = spot.facing;
+        placeCamera(); // move the camera to the new player position
+    }
+    else {
+        stats.currentSpot = (stats.currentSpot + 1) % Court.rotationSpots;   // 0, 1, 2, 3, 4, then 0 again
+        const spot = Court.spots[stats.currentSpot];
+        playerMesh.position.set(spot.x, 0, spot.z);
+        playerMesh.rotation.y = spot.facing;
+        placeCamera(); // move the camera to the new player position
+    }
 };
 
 // where the camera is heading: placeCamera sets it, smoothCamera moves the camera towards it every frame

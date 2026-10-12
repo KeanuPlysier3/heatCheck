@@ -21,43 +21,14 @@ import { resizeRendererToDisplaySize } from './helpers/resizeRenderer.js';
 import { math } from '@tensorflow/tfjs-core';
 
 //FLAGS
-// the game's state lives in these variables. R = a function reads it, W = a function changes it.
-// change them only in the functions listed here, so there is one place to look when something goes wrong
-
-// which game is being played: 'menu' | 'freePlay' | 'aroundTheWorld' | (more modes later)
-//   W: handleFreeplayClick, startAroundTheWorld, the Home button in setEvents
-//   R: checkMadeShot (only Around the World counts the 15 makes)
-let mode = 'menu';
-
-// where the current run is: 'idle' (nothing started) | 'countdown' | 'playing' | 'finished'
-//   W: handleFreeplayClick, startAroundTheWorld, endTimer, the Home button in setEvents
-//   R: startMeter (a shot can only be started while 'playing'), checkMadeShot
-let runPhase = 'idle';
-
-// where the current shot, and so the ball, is:
-//   'idle'      the ball is in the hand
-//   'aiming'    the ball is in the hand and the meter is filling
-//   'flying'    the ball is in the air and the shot is not decided yet
-//   'landing'   missed: the ball keeps bouncing until it touches the floor
-//   'shrinking' the ball is shrinking away, on its way back to the hand
-//   W: startMeter (idle > aiming), resetMeter (aiming > idle), shoot (> flying),
-//      shotReset (> landing or shrinking), updateBallReturn (landing > shrinking > idle)
-//   R: startMeter, releaseMeter, updateMeter, shoot, checkMadeShot, updateBallReturn, render,
-//      and ballIsHeld, which shoot and render use
-let shotPhase = 'idle';
-
-// true while the ball sits in the hand: before the shot, and while the meter fills
-const ballIsHeld = () => shotPhase === 'idle' || shotPhase === 'aiming';
-
-// whether the ball has passed the top sensor on its way through the hoop
-//   W: shoot (false for every new shot), checkMadeShot (true at the top sensor, false again after a make)
-//   R: checkMadeShot
+let mode = 'menu';       // 'menu' | 'freePlay' | 'aroundTheWorld'
+let runPhase = 'idle';   // 'idle' | 'countdown' | 'playing' | 'finished'
+let shotPhase = 'idle';  // 'idle' | 'aiming' | 'flying' | 'landing' | 'shrinking'
 let passedTop = false;
-
-// whether the player is in the air
-//   W: startJump (true), updateJump (false when the feet are back on the floor)
-//   R: startJump, updateJump
 let jumping = false;
+
+// true while the ball sits in the hand
+const ballIsHeld = () => shotPhase === 'idle' || shotPhase === 'aiming';
 
 let canvas;
 let renderer;
@@ -212,6 +183,17 @@ const startMeter = () => {
     meterValue = 0;
 };
 
+// starts the PERFECT! animation (the css does the pop-in, the waiting and the fade-out)
+const showPerfect = () => {
+    const perfectElement = document.getElementById('shotPerfect');
+    const tilt = (3 + Math.random() * 6) * (Math.random() < 0.5 ? -1 : 1);   // 3 to 9 degrees, to the left or the right
+    perfectElement.style.setProperty('--tilt', tilt + 'deg');                 // the css animation turns it into the pop, the swing and the rest
+    perfectElement.hidden = false;
+    perfectElement.style.animation = 'none';   // restart the animation, also when the text is still showing from the last shot
+    void perfectElement.offsetWidth;
+    perfectElement.style.animation = '';
+};
+
 const releaseMeter = () => {
     if (shotPhase !== 'aiming') return;  // nothing to release
     console.log('released at', meterValue.toFixed(2));
@@ -227,6 +209,8 @@ const releaseMeter = () => {
         const howLate = (meterValue - greenTop) / (1 - greenTop);          // 0 at the green's edge, 1 at a full meter
         power = 1 + howLate * Meter.maxError;                              // late: more power, long
     } else {
+        showPerfect();
+
         greenGiant.currentTime = 0;
         greenGiant.play();
         console.log('Perfect shot!');
@@ -392,6 +376,20 @@ const handleAroundTheWorldClick = () => {
     startAroundTheWorld();
 };
 
+const handleDowntownCountdownClick = () => {
+    hideMenu();
+    placeCamera(); // move the camera to the current spot's position
+    startDowntownCountdown();
+}
+
+const startDowntownCountdown = async () => {
+    mode = 'downtownCountdown';
+    runPhase = 'countdown';
+    await showCountDown(3);
+    runPhase = 'playing';
+    document.getElementById('timer').hidden = false;   // the stopwatch shows up when the run starts
+    startCountdownTimer(60); // 60 seconds countdown
+}
 
 
 const startAroundTheWorld = async () => {
@@ -425,8 +423,10 @@ const endTimer = () => {
     runPhase = 'finished';
 
     document.getElementById('afterGame').hidden = false; // show the after game screen when the run ends
+    document.getElementById('retry').hidden = false; // show the retry button for around the world
+    document.getElementById('retry2').hidden = true; // show the retry button for downtown countdown
     document.getElementById('yourTime').textContent = `Your Time: ${Math.floor(currentTime / 60)}:${(currentTime % 60).toString().padStart(2, '0')}`;
-   
+
 }
 
 
@@ -441,7 +441,31 @@ const startTimer = () => {
     }, 1000);
 }
 
+const startCountdownTimer = (timeLimit) => {
+    stats.AroundTheWorldShots = 0;
+    stopWatch = timeLimit;
+    timeInterval = setInterval(() => {
+        stopWatch = Math.max(0, stopWatch - 1);
+        if (stopWatch === 0) {
 
+            endCountdownTimer();
+        }
+        document.getElementById('timerValue').textContent = `${stopWatch.toString()}s`;
+    }, 1000);
+}
+
+const endCountdownTimer = () => {
+    clearInterval(timeInterval);
+    const currentTime = stopWatch;
+    console.log(`Time's up! Final time: ${currentTime} seconds`);
+    
+    stopWatch = 0;
+    runPhase = 'finished';
+    document.getElementById('retry').hidden = true; // show the retry button for around the world
+    document.getElementById('retry2').hidden = false; // show the retry button for downtown countdown
+    document.getElementById('afterGame').hidden = false; // show the after game screen when the run ends
+    document.getElementById('yourTime').textContent = `Your score: ${stats.madeShots} (${stats.shootingPercentage.toFixed(2)}%)`;
+}
 
 const showCountDown = async (seconds) => {
     const countdownElement = document.querySelector('#countdown');
@@ -470,6 +494,8 @@ const setEvents = () => {
     // main menu: the two game modes
     document.querySelector('#freePlayBtn').addEventListener('click', handleFreeplayClick);
     document.querySelector('#aroundTheWorldBtn').addEventListener('click', handleAroundTheWorldClick);
+    document.querySelector('#downTownCountdownBtn').addEventListener('click', handleDowntownCountdownClick);
+
 
     // after game screen: back to the menu, or run it again
     document.getElementById('homeBtn').addEventListener('click', () => {
@@ -479,9 +505,20 @@ const setEvents = () => {
         runPhase = 'idle';
         showMenu();
     });
+
     document.getElementById('retry').addEventListener('click', () => {
         document.getElementById('afterGame').hidden = true;
         startAroundTheWorld();
+    });
+
+    document.getElementById('retry2').addEventListener('click', () => {
+        document.getElementById('afterGame').hidden = true;
+        startDowntownCountdown();
+    });
+
+    // PERFECT!: hidden when its css animation is over
+    document.getElementById('shotPerfect').addEventListener('animationend', (event) => {
+        event.target.hidden = true;
     });
 
     // the shot meter: hold space to fill it, let go to shoot

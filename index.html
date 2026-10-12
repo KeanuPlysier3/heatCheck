@@ -226,7 +226,8 @@
 
         #timer {
             position: absolute;
-            top: 2%;
+            top: 9%;
+            /* under the menu button */
             right: 2.2%;
             display: flex;
             flex-direction: column;
@@ -682,6 +683,136 @@
             }
         }
 
+        /* the in-game menu button: a small yellow sticker in the top right corner, the timer and the deep shot
+           checkbox sit under it */
+        #menuBtn {
+            position: absolute;
+            top: 2%;
+            right: 2.2%;
+            padding: .3em .9em;
+            font-family: "Bowlby One", Impact, "Arial Black", sans-serif;
+            font-size: clamp(.9rem, 1.4vw, 1.2rem);
+            letter-spacing: .02em;
+            text-transform: uppercase;
+            color: #1B1030;
+            background-color: #FFD400;
+            background-image: radial-gradient(rgba(27, 16, 48, .22) 22%, transparent 24%);
+            background-size: .3em .3em;
+            border: .16em solid #1B1030;
+            border-radius: 0;
+            cursor: pointer;
+            box-shadow: .1em .1em 0 #FF3D8B, .2em .2em 0 #1B1030;
+            transform: skewX(-8deg);
+            transition: transform .1s, box-shadow .1s;
+        }
+
+        #menuBtn:hover {
+            transform: skewX(-8deg) translate(-.06em, -.06em);
+            box-shadow: .16em .16em 0 #FF3D8B, .3em .3em 0 #1B1030;
+        }
+
+        #menuBtn:active {
+            transform: skewX(-8deg) translate(.2em, .2em);
+            box-shadow: 0 0 0 #FF3D8B, 0 0 0 #1B1030;
+        }
+
+        #menuBtn:focus-visible {
+            outline: .14em solid #FFF1D0;
+            outline-offset: .16em;
+        }
+
+        /* sticker checkboxes (performance mode, deep shot only): a cream box that gets a fat lime tick */
+        .stickerCheckbox {
+            display: flex;
+            align-items: center;
+            gap: .6em;
+            align-self: flex-start;
+            font-family: "Bowlby One", Impact, "Arial Black", sans-serif;
+            font-size: clamp(.9rem, 1.4vw, 1.2rem);
+            letter-spacing: .02em;
+            text-transform: uppercase;
+            color: #FFF1D0;
+            /* the dark outline of the logo, as a text shadow so the cream reads on the blue */
+            text-shadow: .08em .08em 0 #1B1030;
+            cursor: pointer;
+            user-select: none;
+            transform: skewX(-8deg);
+        }
+
+        /* the browser's own box is replaced by a drawn one */
+        .stickerCheckbox input {
+            appearance: none;
+            -webkit-appearance: none;
+            flex: none;
+            display: grid;
+            place-content: center;
+            width: 1.4em;
+            height: 1.4em;
+            margin: 0;
+            background: #FFF1D0;
+            border: .14em solid #1B1030;
+            box-shadow: .12em .12em 0 #FF3D8B, .24em .24em 0 #1B1030;
+            cursor: pointer;
+            transition: transform .1s, box-shadow .1s, background-color .1s;
+        }
+
+        /* the tick: two borders of a turned rectangle, hidden until checked */
+        .stickerCheckbox input::after {
+            content: "";
+            width: .35em;
+            height: .7em;
+            margin-top: -.15em;
+            border: solid #1B1030;
+            border-width: 0 .18em .18em 0;
+            transform: rotate(45deg) scale(0);
+            transition: transform .12s;
+        }
+
+        .stickerCheckbox input:checked {
+            background: #B6F500;
+            /* lime, like the downtown countdown button */
+        }
+
+        .stickerCheckbox input:checked::after {
+            transform: rotate(45deg) scale(1);
+        }
+
+        .stickerCheckbox:hover input {
+            transform: translate(-.06em, -.06em);
+            box-shadow: .18em .18em 0 #FF3D8B, .32em .32em 0 #1B1030;
+        }
+
+        .stickerCheckbox input:focus-visible {
+            outline: .14em solid #FFF1D0;
+            outline-offset: .16em;
+        }
+
+        #performanceMode {
+            margin-top: .4em;
+            /* a little space under the buttons */
+        }
+
+        /* deep shot only: in the game, top right, where the timer is in the timed modes (free play has no timer) */
+        #deepShotsOnly {
+            position: absolute;
+            top: 9%;
+            /* under the menu button */
+            right: 2.2%;
+        }
+
+        #deepShotsOnly[hidden] {
+            display: none;
+            /* display: flex above would beat the hidden attribute */
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+
+            .stickerCheckbox input,
+            .stickerCheckbox input::after {
+                transition: none;
+            }
+        }
+
         /* the after game screen: a frosted layer over the game, one big sticker card in the middle.
            display is set here, so [hidden] is spelled out: script.js shows and hides it with the hidden property */
         #afterGame {
@@ -869,6 +1000,7 @@
     </div>
 
     <div id="stats">
+        <p>Points: <span id="points">0</span></p>
         <p>Shots: <span id="shots">0</span></p>
         <p>Made Shots: <span id="madeShots">0</span></p>
         <p>Shooting Percentage: <span id="shootingPercentage">0%</span></p>
@@ -880,6 +1012,15 @@
     </div>
     <canvas id="c"></canvas>
 
+    <!-- free play only: hidden until free play starts -->
+    <label id="deepShotsOnly" class="stickerCheckbox" hidden >
+        <input type="checkbox" id="deepShotOnlyCheckbox">
+        <span>deep shot only</span>
+    </label>
+
+    <!-- in game: back to the menu. the menu covers it while it is open -->
+    <button id="menuBtn">Menu</button>
+
     <div id="menu">
         <div id="menu__buttons">
             <h1 id="menu__logo" aria-label="heatCheck"><span class="heat">heat</span><span class="check">Check</span>
@@ -887,6 +1028,10 @@
             <button id="freePlayBtn">FreePlay</button>
             <button id="aroundTheWorldBtn">Around the World</button>
             <button id="downTownCountdownBtn">downtown countdown</button>
+            <label id="performanceMode" class="stickerCheckbox">
+                <input type="checkbox" id="performanceModeCheckbox">
+                <span>performance mode</span>
+            </label>
         </div>
         <canvas id="menu__canvas"></canvas>
     </div>

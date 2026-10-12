@@ -1,6 +1,7 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { Basketball } from './constants/basketball';
 import { Court } from './constants/court';
+import { Fence } from './constants/fence';
 await RAPIER.init();
 
 
@@ -58,6 +59,17 @@ export const createPhysics = () => {
             .setTranslation(0, backboardBottom + backboardHeight / 2, rimZ + (backboardBack + poleZ) / 2)
     );
 
+
+    // the fence behind the hoop: a thin wall the full width and height of the tall fence side, so long misses
+    // bounce back towards the court instead of flying on into the street. the chain-link gives, so it is not
+    // very bouncy. this collider is part of the game, so it exists even when the environment is not drawn
+    const fenceThickness = 0.1;
+    world.createCollider(
+        RAPIER.ColliderDesc.cuboid((Fence.maxX - Fence.minX) / 2, Fence.backHeight / 2, fenceThickness / 2) // half sizes
+            .setTranslation((Fence.minX + Fence.maxX) / 2, Fence.groundY + Fence.backHeight / 2, Fence.maxZ)
+            .setRestitution(0.3)
+            .setFriction(0.5)
+    );
 
     const sensorRadius = rimRadius - rimThickness;
     const sensorHalfHeight = 0.04;

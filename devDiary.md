@@ -1198,3 +1198,545 @@ ball had already bounced a few centimetres up, so it kept waiting: either for th
   within a couple of centimetres of the floor for a very short time. A wider margin makes it less likely
   that a made ball's landing is not noticed, which would leave it to the 1.5 s timeout.
 - The floor test for deciding a miss, in `checkMadeShot`, is unchanged and keeps its 2 cm margin.
+
+## 2026-10-12: the street and the sidewalks, in a new environment file
+
+**What changed:**
+
+- New `js/constants/street.js` with two objects:
+  - `Street`: the ground height (`groundY`, the surround's height), the length (the surround's depth, 30 m),
+    the street's middle (`centreX` 14.5) and width (5 m), the dashed line (12 cm wide, 2 m dashes, 2 m
+    gaps) and the zebra crossing (at z = -12, 3 m deep, 0.5 m stripes and gaps).
+  - `Sidewalk`: the kerb height (0.15 m) and three strips, each a centre on x and a width: between the
+    court and the street (10.75, 2.5 m), across the street in front of the future bodega (18, 2 m), and
+    between the court and the future brownstones (-10.75, 2.5 m).
+- New `js/objects/street.js`, exporting `createStreet()`: the asphalt, the dashed centre line and the
+  zebra crossing.
+- New `js/objects/sidewalk.js`, exporting `createSidewalks()`: one raised slab with an outline per strip.
+- `js/environment.js` (it held an empty stub): `createEnvironment()` is now exported, puts the street and
+  the sidewalks in one `THREE.Group` and returns it.
+- `js/constants/colors.js`: four colours: `street`, `streetLine`, `crosswalk`, `sidewalk`.
+- `js/script.js`: imports `createEnvironment` and adds its group to the scene right after the court.
+
+**Why:** the first step of the Brooklyn block from the ground plan. The street runs along the player's
+left (+x), so the court sits inside a city block and not on an empty purple field. Everything decorative
+goes through `createEnvironment()`, so a performance mode can later skip the whole block with one
+condition. None of it has a physics collider, so the game plays the same without it.
+
+**How it works:**
+
+- **Positions follow the ground plan,** in the same coordinates as the court: the court is 15 m wide
+  (x -7.5 to 7.5), the street runs from x = 12 to 17, the sidewalks fill 9.5 to 12, 17 to 19 and -12 to
+  -9.5, and everything runs the full 30 m depth of the surround (z -15 to 15).
+- **Heights:** the surround lies at `-Court.thickness` (-0.2), which is `Street.groundY`.
+  - The asphalt is a plane 1 cm above that, and the markings 2 cm above it. Two flat surfaces at exactly
+    the same height flicker, because the renderer cannot decide which is in front.
+  - A sidewalk is a box `Sidewalk.height` (0.15 m) tall, standing on the ground, so its centre is at
+    `groundY + height / 2`. Its top is at -0.05, just below the court's surface at 0. The box's sides are
+    the kerbs.
+- **Planes are laid flat** with `rotation.x = -90°`, as with the court's surround, and placed by their
+  centre.
+- **The dashed line** is a loop that starts half a dash in from one end of the street and steps
+  `dashLength + dashGap` (4 m) at a time, putting one dash at each step: 8 dashes over 30 m. All dashes
+  share one geometry and one material.
+- **The zebra crossing** is a second loop. It first works out how many stripes fit across the 5 m street
+  with a gap left over (4), then centres that group, so both kerbs keep the same margin (0.75 m). The
+  stripes run along the street, side by side across it, the way a crossing is painted.
+- **Sidewalk outlines** use `createOutlineMesh` like the court's floor: the same box,
+  `Outline.thickness` bigger on every side, as a child of the sidewalk mesh.
+- **Lighting:** the materials use `emissive` with `SelfLight`, the same as the court and the surround, so
+  the new surfaces are as bright as the ground they lie on.
+- **`THREE.Group`** is an `Object3D` meant only for grouping. It works the same as the empty `Object3D`
+  containers elsewhere; adding or leaving out that one group adds or removes everything in it.
+
+## 2026-10-12: sidewalks changed to beige
+
+**What changed:** `js/constants/colors.js`, `sidewalk` from `0x8C82A0` (greyish lilac) to `0xC8A27C`
+(sandy beige). The old value is in the comment on that line.
+
+**Why:** the sidewalks came out almost white on screen. A warm beige fits the sunset palette better and
+sets the walkways apart from the purple surround and the dark street.
+
+**How it works:** `createSidewalks()` builds its material from `Colors.sidewalk`, so this one value
+recolours all three strips. The sidewalks look lighter on screen than the hex value, because their
+material adds its own colour on top of the light it receives (`emissive` at `SelfLight` = 1) and the
+directional light is strong (intensity 15). On faces that point up at the light, light colours are pushed
+towards white.
+
+## 2026-10-12: street trees
+
+**What changed:**
+
+- New `js/constants/tree.js` with a `Tree` object: the trunk's size, the crown's cubes (3 to 4 of them,
+  1.0 to 1.6 m), how far they can spread, rise and tilt, and how trees are placed along the sidewalks
+  (slots of 6 m, a 70% chance per slot, up to 1.5 m off the slot's middle).
+- New `js/objects/tree.js`, exporting `createTree()` (one tree) and `createTrees()` (rows of trees along
+  every sidewalk strip).
+- `js/constants/colors.js`: `treeTrunk`, `treeLeaves` and `treeLeavesDark`.
+- `js/environment.js`: adds `createTrees()` to the environment group.
+
+**Why:** the next piece of the Brooklyn block from the ground plan. Street trees soften the hard edges of the
+street and the sidewalks. Big cubes as leaves keep them low-poly and cartoon-like, in line with the rest.
+
+**How it works:**
+
+- **One tree** (`createTree`) is built around its own origin, the point on the ground where the trunk
+  stands, like the player and the hoop:
+  - the trunk is a tall thin box, lifted by half its height so it stands on the origin;
+  - the crown is a loop that makes 3 or 4 cubes. Each gets a random edge length, a random place around the
+    top of the trunk (`leafSpread` sideways, up to `leafRise` above), and a random angle: a little tipped
+    over on x and z (`leafTilt`), and any turn up to 90° around y. A cube looks the same every 90°, so a
+    quarter turn covers every orientation.
+  - the cubes alternate between two greens (`i % 2`), so neighbouring cubes stand apart;
+  - every part gets an outline: the same box, `Outline.thickness` bigger on every side, as a child, so the
+    outline turns along with a tilted cube.
+- **`randomBetween(min, max)`** gives a random number in a range: `Math.random()` is between 0 and 1, so
+  `min + Math.random() * (max - min)` is between min and max.
+- **Placing them** (`createTrees`): random positions could put two trees inside each other, or none along a
+  whole stretch. So each sidewalk strip is cut into slots of `slotLength` along z (5 slots over 30 m).
+  Every slot gets at most one tree, near its middle and moved by up to `slotJitter`, so trees are always
+  at least 3 m apart. `Tree.chance` leaves some slots empty, so the rows have gaps.
+  - each tree stands on top of the sidewalk: `Street.groundY + Sidewalk.height`;
+  - the whole tree is turned to a random angle around y, so the crowns face different ways.
+- **The layout is different on every page load**, because `Math.random()` gives new numbers each time.
+- **Materials are shared:** one for all trunks and two for all leaves, created once outside the functions.
+  Only the geometries differ per cube, because their sizes differ.
+- The leaves have `castShadow`, so trees near the court can drop shadows on it. The trunks and outlines
+  do not.
+
+## 2026-10-12: chain-link fence around the court
+
+**What changed:**
+
+- New `js/constants/fence.js` with a `Fence` object: the rectangle it stands on (x -8.5 to 8.5, z -8 to
+  9), the heights (3.5 m, and 5.5 m behind the hoop), the gate (a gap from z -6.5 to -5 in the street
+  side), the posts and the top rail, and the wire pattern (one diamond every 15 cm, drawn on a 64 x 64
+  pixel canvas with a 5 pixel wire).
+- New `js/objects/fence.js`, exporting `createFence()`.
+- `js/constants/colors.js`: `fenceWire` and `fencePost`.
+- `js/environment.js`: adds the fence to the environment group.
+
+**Why:** a caged street court is one of the clearest signs of a Brooklyn setting, and the ground plan put it
+in tier 1. The pattern is drawn by code, so no image had to be found, licensed or added to the project.
+
+**How it works:**
+
+- **The diamond.** `createDiamondCanvas()` makes a `<canvas>` element that is never added to the page,
+  and draws one diamond on it with `moveTo`, `lineTo` and `stroke`: four lines through the middles of the
+  canvas's edges. Only the wire is painted; the rest of the canvas stays transparent. When the square is
+  repeated, the halves at its edges meet those of the next square, so the pattern continues as a mesh.
+  A canvas wants a CSS colour string, so the hex number from `Colors` is turned into one:
+  `'#' + Colors.fenceWire.toString(16).padStart(6, '0')`.
+- **The texture.** `THREE.CanvasTexture(diamondCanvas)` uses that canvas as a texture. `RepeatWrapping`
+  and `repeat.set(length / diamondSize, height / diamondSize)` tile it across a side so that each diamond
+  is 15 cm, however long the side is. Each side gets its own texture object, because its repeat count
+  depends on its size, but they all share the one canvas.
+- **The holes.** The material has `alphaTest: 0.5`: every pixel that is less than half solid is not drawn
+  at all. That makes the transparent parts real holes. It is used instead of `transparent: true`, which
+  blends and has to sort overlapping see-through surfaces, and the fence overlaps nearly everything.
+  `side: THREE.DoubleSide` shows the mesh from inside and outside the court.
+- **One side** (`createSide(a, b, height)`) runs straight from point `a` to point `b` on the ground:
+  - its length is `Math.hypot(dx, dz)`, and its middle is halfway between the two points;
+  - `angle = Math.atan2(-dz, dx)` is how far to turn something that lies along x so it lies along the
+    side. Checked for all five sides: the turned plane's width points exactly along each one;
+  - the wire mesh is a `PlaneGeometry(length, height)`, which is made standing up with its width along x,
+    turned by `angle` around y and lifted by half its height;
+  - posts are cylinders at both ends and evenly in between, never more than `postSpacing` (3 m) apart:
+    `Math.ceil(length / postSpacing)` gaps, so a 17 m side gets 7 posts;
+  - the top rail is a cylinder, which is made standing along y. `rotation.set(0, angle, Math.PI / 2)`
+    first lays it down along x (the z rotation), then turns it to follow the side (the y rotation): with
+    the default rotation order, three.js applies z before y.
+- **The whole fence** is five sides: the tall one behind the hoop, the camera end, the brownstone side, and
+  the street side in two parts with the gate between them.
+- Posts and rails have outlines and the lit, self-lit material used elsewhere. The wire mesh has neither:
+  an outline shell would be a solid box, and `MeshBasicMaterial` keeps the wire one flat colour.
+- The fence has no collider, like the rest of the environment, so a long miss flies through it.
+- Where two sides meet, both place a post at the corner, so the corners have two posts in the same spot.
+  They overlap exactly and look like one.
+
+## 2026-10-12: buildings on both sides of the block
+
+**What changed:**
+
+- New `js/constants/buildings.js` with a `Buildings` object: the storey height, the window grid (3 per
+  storey, 0.9 x 1.4 m, a 35% chance to be lit), the cornice, the brownstone row (5 houses of 5 m, 10 to
+  13 m tall, fronts at x = -13 facing the court, with stoops), the three buildings across the street (fronts
+  at x = 19, the first one the bodega), and the water towers on three roofs.
+- New `js/objects/buildings.js`, exporting `createBuildings()`.
+- `js/constants/colors.js`: three building colours, the bodega's blue, the cornice, lit and dark windows,
+  the door, the awning, the sign and the water towers.
+- `js/environment.js`: adds the buildings to the environment group.
+
+**Why:** the brownstones and the corner bodega from the ground plan. They close the block on both sides, so
+the court sits in a street, and they carry most of the Brooklyn look. They were kept simple on purpose:
+each building is one box, with the detail painted on its front.
+
+**How it works:**
+
+- **One building is a box** the size of the building, with a ledge (the cornice) on top. Its front stands at
+  `frontX` and its body goes backwards, away from the court. `facing` is +1 when the front looks towards
+  +x (the brownstones) and -1 when it looks towards -x (across the street), so the centre is
+  `frontX - facing * depth / 2` on both sides.
+- **The windows are painted, not built.** `paintFront()` draws the front on a canvas the size of the
+  building (24 pixels per metre): the wall colour, then one window per storey per column, each lit or dark
+  at random, then a door (brownstones) or a shop with a sign (the bodega). That canvas becomes the texture
+  of the front only. A box accepts six materials, one per side, in the order +x, -x, +y, -y, +z, -z, so
+  the front gets the painted material and the other five a plain wall material.
+  - A canvas measures y from the top and a building from the ground, so `fromGround(metres)` turns a
+    height into canvas pixels: `canvas.height - metres * ppm`.
+  - Painting the windows keeps every building at a handful of meshes, where real window boxes would add
+    dozens of objects per building.
+- **The front's material** is lit and self-lit with the canvas (`map` and `emissiveMap`), the same way the
+  court floor uses its texture, so the painted colours come out as bright as the plain walls.
+- **Stoops** are 4 boxes in front of each brownstone's door. Step 0 is against the front and the highest;
+  each next one is one step lower and one step further out, so together they form a staircase.
+- **The bodega** has a lit shop window, a door, a hot pink sign band reading "DELI · GROCERY", and a lime
+  awning: a thin slab sticking out over the window.
+- **Water towers** are four thin legs, a wooden barrel and a cone roof, placed on the roof of the chosen
+  buildings. Each building stores the middle of its roof in `userData.roof` so the tower can be put there.
+- **Shared materials:** `plainMaterial(color)` keeps one material per colour in a `Map` and hands out the
+  same one every time, so all walls of one colour share it.
+- `css(color)` turns a palette number like `0x9a5b44` into the text `'#9a5b44'` a canvas needs.
+- Window lights and brownstone heights are random, so they differ on every page load.
+- Every box has an outline. The buildings have no collider and cast no shadows.
+
+## 2026-10-12: the bodega removed
+
+**What changed:**
+
+- `js/objects/buildings.js`:
+  - `paintFront()` no longer paints a shop window, a door, a sign band or the "DELI · GROCERY" text, and
+    no longer leaves a ground floor empty for a shop. Only a brownstone skips its middle ground-floor
+    window, for its door.
+  - `createBuilding()` no longer adds an awning.
+  - `createBuildings()` builds every building across the street as a plain building.
+- `js/constants/buildings.js`: the first building across the street is a plain one now: brown, 8 m tall
+  (it was the 7 m blue bodega). The `bodega: true` flag and its comment are gone.
+- `js/constants/colors.js`: `bodega`, `awning` and `sign` are removed, since nothing uses them any more.
+- `js/constants/street.js`: the far sidewalk's comment no longer mentions the bodega.
+
+**Why:** the corner shop was taken out of the design. The buildings across the street are now plain
+buildings with windows, like the brownstones but without stoops.
+
+**How it works:** `kind` now has two values. `'brownstone'` gets a door painted on the front, a gap in the
+ground-floor windows for it, and a stoop. `'plain'` gets only the window grid. Everything else about a
+building (the box, the painted front, the cornice, the water towers) is unchanged.
+
+## 2026-10-12: the elevated train track
+
+**What changed:**
+
+- New `js/constants/track.js` with a `Track` object: where the line runs (along x, the full 50 m of the
+  surround, centred at z = 13.9), the deck (6 m up, 2.2 m wide, 0.6 m thick), the columns (pairs every
+  5 m, 0.35 m square), the rails (1.4 m apart) and the sleepers (one every 0.6 m).
+- New `js/objects/track.js`, exporting `createTrack()`.
+- `js/constants/colors.js`: `trackSteel`, `trackDeck`, `trackSleeper` and `trackRail`.
+- `js/environment.js`: adds the track to the environment group.
+
+**Why:** the elevated train from the ground plan, the "El" that runs over the streets in Bushwick and
+Williamsburg. It stands behind the hoop, so it is in view above the fence in every shot, and it is one of
+the most recognisable parts of a Brooklyn street. There is no train on it yet.
+
+**How it works:**
+
+- **Where:** the deck runs from z = 12.8 to 15, behind both rows of buildings (which end at 12.5) and
+  inside the surround (which ends at 15), and from x = -25 to 25. It is in the same coordinates as
+  everything else, so it crosses the street, and one pair of columns stands in the street at x = 12.5, as
+  real El columns do.
+- **The deck** is one long box. A box is centred on its middle, so to put its top at `deckY` it is placed
+  at `groundY + deckY - deckThickness / 2`.
+- **The sleepers** are painted, like the fence's diamonds: `createSleeperTexture()` draws one sleeper on a
+  canvas that covers 0.6 m of track and the deck's full width, and `RepeatWrapping` with
+  `repeat.set(length / sleeperSpacing, 1)` repeats it 83 times along the deck and once across. Only the
+  top of the deck gets this material: a box takes six materials in the order +x, -x, +y, -y, +z, -z, and
+  the top is +y, the third. The other five sides are plain steel.
+- **The columns** are placed by a loop along x, starting half a spacing in from the end so the pairs are
+  centred along the track: 10 pairs at x = -22.5, -17.5, ... 22.5. Each pair stands under both edges of
+  the deck, a column's width in from the edge (z = 13.15 and 14.65). They reach from the ground to the
+  underside of the deck, `deckY - deckThickness` tall, and are placed by their middle.
+- **The rails** are two long thin boxes lying on top of the deck, `railGauge / 2` either side of its middle
+  line, lifted by half their height so they rest on the deck.
+- Every box has an outline. Nothing has a collider or casts a shadow.
+
+## 2026-10-12: the mural wall behind the hoop
+
+**What changed:**
+
+- New `js/constants/wall.js` with a `Wall` object: where it stands (centred at z = 10.25, between the fence
+  and the train track), its size (19 m wide, 4.5 m high, 0.5 m thick), the cap on top, and the painted
+  face (40 pixels per metre, the brick size, and the text "HEAT CHECK" at 2 m tall).
+- New `js/objects/wall.js`, exporting `createWall()`.
+- `js/constants/colors.js`: `wallBrick` and `wallMortar`.
+- `js/environment.js`: adds the wall to the environment group.
+
+**Why:** the camera looks towards the hoop, so the strip behind the backboard is in every shot. A painted
+brick wall there is the strongest single sign of a street court, and it puts the game's name into the
+world itself. In the ground plan it is also the spot marked for a possible second shader.
+
+**How it works:**
+
+- **The wall** is a box with a cap (the coping) on top, like the buildings' cornice. Only its face towards
+  the court gets the mural. That face is -z, because the camera stands at the -z end looking towards the
+  hoop. A box takes six materials in the order +x, -x, +y, -y, +z, -z, so the mural is the sixth. Box faces
+  are made so that their textures read the right way round from outside, so the letters are not mirrored.
+- **`paintMural()`** paints the face on a canvas the size of the wall, in layers. Each layer is painted
+  over the one before:
+  1. **Bricks:** the whole canvas in mortar colour first, then one brick rectangle per row and column, each
+     smaller than its cell by the mortar width, so the mortar shows between them. Every other row starts
+     half a brick to the left (`row % 2`), which gives the staggered pattern of a real wall.
+  2. **Background shapes:** a big sunset-orange disc (`arc`) and two broad swooshes in the court's teal and
+     the key's pink. A swoosh is one curved line (`bezierCurveTo`) drawn twice: first wide and dark for its
+     border, then a little narrower in its own colour on top.
+  3. **The name:** "HEAT CHECK" in a heavy font. `translate` and `rotate` move the canvas's origin to the
+     middle of the wall and tilt it a little, so the letters look painted by hand. It is drawn three
+     times: a pink copy shifted down and right (the 3D shadow), a thick dark outline (`strokeText`), and the
+     yellow fill on top (`fillText`). `save()` and `restore()` undo the tilt afterwards.
+  4. **Drips:** six thin rectangles with a round blob at the bottom, hanging under the letters at fixed
+     spots along `measureText(...).width`, the width of the text. They are not random, so the mural looks
+     the same every time.
+- **The material** uses the canvas as `map` and `emissiveMap`, like the buildings' fronts, so the mural's
+  colours come out as bright as the walls around it.
+- The font is Impact, with Arial Black and any heavy sans-serif as fallbacks: a canvas can only use fonts
+  the browser already has, and these are on nearly every system.
+- The wall has an outline and no collider. A long miss can fly through it.
+
+## 2026-10-12: the mural wall is beige concrete, not brick
+
+**What changed:**
+
+- `js/objects/wall.js`: the first layer of `paintMural()` paints plain beige concrete with thin vertical
+  joints between panels, where it painted a brick pattern. The wall's other five sides use the concrete
+  colour too.
+- `js/constants/wall.js`: `brickWidth`, `brickHeight` and `mortarWidth` are replaced by `panelWidth`
+  (3.2 m) and `jointWidth` (5 cm). The comment says concrete.
+- `js/constants/colors.js`: `wallBrick` and `wallMortar` are replaced by `wallConcrete` (`0xE3CFA8`, a
+  light beige, lighter than the sidewalk) and `wallJoint` (`0xC4AC86`, a darker beige).
+
+**Why:** red brick made the wall heavy and busy behind the mural. A calm, light beige surface lets the
+painted shapes and the name stand out, and fits the flat cartoon look.
+
+**How it works:**
+
+- The canvas is filled with the concrete colour, then a thin joint is drawn every `panelWidth`, the seams
+  between cast concrete panels. The first joint is at `(w / 2) % panel`: the remainder of half the wall's
+  width divided by a panel's width. That puts a joint pattern that is centred on the wall, so both ends
+  look alike.
+- The swooshes, the sunset disc, the "HEAT CHECK" letters and the drips are unchanged; they are painted on
+  top of the concrete as before.
+
+## 2026-10-12: the mural wall is plain purplish blue
+
+**What changed:**
+
+- `js/objects/wall.js`: the first layer of `paintMural()` is now only one flat fill. The loop that drew the
+  vertical panel joints is gone.
+- `js/constants/wall.js`: `panelWidth` and `jointWidth` are removed.
+- `js/constants/colors.js`: `wallConcrete` is `0x5E5BD1`, a purplish blue (it was beige, `0xE3CFA8`), and
+  `wallJoint` is removed.
+
+**Why:** the joint lines made the wall look busy, and the beige was too close to the sidewalk. A deeper
+purplish blue suits the late-90s cartoon palette and makes the mural's orange disc, pink and teal
+swooshes and yellow letters stand out more.
+
+**How it works:** the canvas is filled with `Colors.wallConcrete`, then the mural layers are painted on top
+as before. The wall's other five sides use the same colour, through the same constant.
+
+## 2026-10-12: the swooshes removed from the mural
+
+**What changed:** `js/objects/wall.js`. `paintMural()` no longer paints the two curved bands (the teal and
+the pink swoosh), and the `swoosh` helper function that drew them is gone. The comments now describe the
+mural as a plain wall, a sunset disc and the name.
+
+**Why:** the bands ran across the whole wall as long lines, which made the mural busy. Without them the
+wall is the purplish blue with the orange disc and the "HEAT CHECK" letters in the middle.
+
+**How it works:** the mural is still painted in layers on one canvas: the flat wall colour, the orange disc
+with a dark edge, then the letters with their pink shadow, dark outline, yellow fill and drips. Only the
+layer with the bands was taken out.
+
+## 2026-10-12: the ground around the court is grey asphalt
+
+**What changed:** `js/constants/colors.js`, `surround` from `0x4A3470` (purple) to `0x6F6A75`, a grey with a
+slight lilac tint. The old value is in the comment on that line.
+
+**Why:** now that the court stands in a city block, the ground between the court, the sidewalks and the
+buildings reads as the ground of a lot or a schoolyard. Purple made it look like a stage floor. Grey
+asphalt is what that ground is in a real street, and the touch of lilac keeps it in the palette.
+
+**How it works:** only the surround plane in `createCourt()` reads `Colors.surround`, so this one value
+changes the whole ground. It sits between the dark street (`0x2C2140`) and the light beige sidewalks in
+brightness, so the three surfaces stay easy to tell apart. The cornices on the buildings had the same
+purple, but they use their own `cornice` colour, so they are unchanged.
+
+## 2026-10-12: stands at the camera end, in place of the fence
+
+**What changed:**
+
+- `js/objects/fence.js`: `createFence()` no longer builds the side at the camera end (z = -8). A comment
+  says the stands are there now.
+- `js/constants/fence.js`: the comment on `height` says it is for the two long sides only.
+- New `js/constants/stands.js` with a `Stands` object: as wide as the fence (17 m), starting 0.2 m behind
+  where the fence stood, 4 rows of 0.9 m deep and 0.45 m higher each, seat planks, and a railing along the
+  back of the top row.
+- New `js/objects/stands.js`, exporting `createStands()`.
+- `js/constants/colors.js`: `standFrame` (lilac grey, like the fence posts) and `standSeat` (the pole's
+  yellow).
+- `js/environment.js`: adds the stands to the environment group.
+
+**Why:** a fence across the camera end shut the court off from the viewer's side. Bleachers there give
+the court an audience side that opens up towards the player, and they are a typical part of a
+neighbourhood court.
+
+**How it works:**
+
+- **The rows** are a loop. Each row is a solid box from the ground up to that row's height, so together
+  they form a staircase rising away from the court, like the brownstones' stoops:
+  - row 0 is the lowest and nearest to the court, `rowRise` (0.45 m) high;
+  - every next row is one `rowDepth` further back (towards -z) and one `rowRise` higher;
+  - a box is placed by its middle, so a row's box is at `groundY + height / 2` up and at
+    `frontZ - (row + 0.5) * rowDepth` along z.
+- **The seats** are thin yellow planks on top of every row, slightly deeper than the row
+  (`seatOverhang`) and shifted forwards by half of that, so they stick out over the front edge like a real
+  bleacher seat.
+- **The railing** stands on the top row, just inside its back edge: posts spread evenly over the width with
+  one at each end (`Math.ceil(width / railPostSpacing)` gaps), and one bar along their tops. The top seat
+  is 1.68 m above the court's surface and the railing reaches 2.68 m.
+- The stands' width and front come from the fence's constants (`Fence.maxX - Fence.minX` and
+  `Fence.minZ`), so they line up with the ends of the two fence sides and close off the cage where the
+  fence used to be.
+- They face the court, which is +z, towards the hoop. The menu camera stands behind and well above them
+  (z = -9, 9 m up), so they are in its view without blocking the court.
+- Every box has an outline. No colliders, no shadows.
+
+## 2026-10-12: stand seats changed from yellow to pink
+
+**What changed:** `js/constants/colors.js`, `standSeat` from `0xFFD400` (yellow) to `0xFF3D8B` (hot pink, the
+same as `courtPaint`). The old value is in the comment on that line.
+
+**Why:** the yellow seats competed with the yellow hoop pole and the yellow letters on the mural. Pink is
+already part of the palette and appears on the court's key, so the seats tie in with the court without
+pulling attention away from the hoop.
+
+**How it works:** `createStands()` builds one seat material from `Colors.standSeat`, shared by all four
+planks, so this one value recolours every seat.
+
+## 2026-10-12: a cross street behind the train track, and a row of buildings behind it
+
+**What changed:**
+
+- `js/constants/street.js`: a new `CrossStreet` object: the street's middle (z = 19) and width (5 m), its
+  ends (x -25 to 25), the widths of its two sidewalks (1.5 m and 2 m), and how far the ground behind it
+  reaches (z = 33).
+- New `js/objects/crossStreet.js`, exporting `createCrossStreet()`: the ground, the asphalt, the
+  sidewalks and the dashed centre line.
+- `js/constants/buildings.js`: a new `backRow` (7 buildings along x, fronts at z = 23.5, 8 m deep, 9 to
+  15 m tall) and two more water towers on it.
+- `js/objects/buildings.js`:
+  - `createBuilding()` now builds a building around its own origin, the middle of its front at ground
+    level, always facing +x. It takes `depth`, `length`, `height`, `color` and `kind`; it no longer takes
+    `frontX`, `facing`, `fromZ` and `toZ`.
+  - new `placeBuilding(building, x, z, turn)` moves a building into the world and turns it around y.
+  - `createBuildings()` places the brownstones (turn 0, facing +x), the far side (turn `Math.PI`, facing
+    -x) and the new back row (turn `Math.PI / 2`, facing -z).
+  - the roof position for the water towers is kept in the building's own space and turned into a world
+    position with the building's matrix.
+- `js/environment.js`: adds the cross street to the environment group.
+
+**Why:** behind the train track the scene ended in empty sky. A second street with buildings along it
+makes the court sit in a real grid of streets, and gives the space under and behind the El something to
+look at. The street on the court's left now runs into the cross street, as in a real neighbourhood.
+
+**How it works:**
+
+- **Layout along z, from the court outwards:** the court's ground ends at 15, the near sidewalk runs to
+  16.5, the street to 21.5, the far sidewalk to 23.5, and the back row of buildings starts there and is
+  8 m deep. All of these are worked out in the code from `centreZ`, `width` and the sidewalk widths, so
+  moving the street moves everything with it.
+- **Its own ground:** the court's surround ends at z = 15, so the cross street adds a ground plane in the
+  same grey from there to z = 33, under the street and the buildings.
+- **The T-junction:** the left street ended at z = 15. A piece of asphalt the left street's width now
+  continues it to the cross street's near kerb, so the two join. The near sidewalk is built in two pieces,
+  on both sides of where the left street comes in, and the dashed line along the cross street skips the
+  part where the two streets meet. The far sidewalk is one piece: nothing crosses it.
+- **Layers:** ground at the surround's height, asphalt 1 cm above, dashes 2 cm above, the same as the other
+  street, so nothing flickers.
+- **Buildings facing any way.** The old `createBuilding()` could only face +x or -x, because it placed
+  everything in world coordinates. Now every building is built facing +x around its own origin and then
+  turned. A turn around y by an angle takes +x to `(cos θ, -sin θ)` on the x and z axes, so 0 faces +x,
+  `Math.PI` faces -x and `Math.PI / 2` faces -z. The body goes backwards from the front (local -x), so it
+  always ends up behind the front, away from the street. Checked with three.js: the brownstones and the far
+  side end up exactly where they were before, and the back row's fronts face -z with their bodies behind.
+- **Roofs:** the middle of a roof is stored as a `Vector3` in the building's own space.
+  `applyMatrix4(building.matrix)` applies the building's position and turn to it, which gives where it is
+  in the world, so a water tower lands on the right roof whichever way the building faces.
+  `placeBuilding()` calls `updateMatrix()` so that matrix is up to date straight away.
+
+## Back fence collider (physics.js)
+
+**What:** a Rapier collider for the tall fence behind the hoop, added in `createPhysics()` with `Fence` imported from `constants/fence.js`.
+
+**Why:** long misses and hard bounces off the backboard flew straight through the chain-link into the street, because the fence was only a picture. Now they bounce back towards the court, like on a real street court.
+
+**How it works:** the fence side behind the hoop is one thin box collider, the same pattern as the backboard:
+
+- `cuboid(halfX, halfY, halfZ)` takes half sizes, so the width is `(Fence.maxX - Fence.minX) / 2` (8.5 m half, 17 m wide), the height `Fence.backHeight / 2` and the thickness `0.1 / 2`.
+- `setTranslation` puts its centre in the middle of the fence: x halfway between `minX` and `maxX` (0), y at `Fence.groundY + backHeight / 2` so the bottom stands on the surround, z at `Fence.maxZ` (9), the line where the chain-link is drawn.
+- `setRestitution(0.3)`: chain-link gives, so the ball loses most of its speed, far less bouncy than the glass backboard (0.6). `setFriction(0.5)` lets it slide down the mesh a little.
+
+The numbers come from the same `Fence` constants as the drawn fence, so the mesh and the collider always match. The collider lives in `physics.js`, not in the environment files: it is game physics, so it still exists (as an invisible wall) if the environment is ever left out.
+
+## Deep shot spot (constants/court.js, script.js)
+
+**What:** a sixth spot in `Court.spots`, `'deep'` at index 5, and a new constant `Court.rotationSpots = 5`. In `handleSpotChange()` the rotation now wraps with `% Court.rotationSpots` instead of `% Court.spots.length`.
+
+**Why:** downtown countdown sends the player to a far shot worth extra points when on a hot streak (`Court.spots[5]` in `handleSpotChange()`), but that spot did not exist yet.
+
+**How it works:** the spot is made with the same `makeSpot(name, x, z)` helper as the others, so it gets its `facing` angle towards the rim for free. It stands at x = 0 (straight in front of the hoop) and `rimZ - 9.5`, so 9.5 m from the rim against 7.25 m for the arc spots, still on the court (z ≈ -4.1, the court ends at -7). The normal rotation used `Court.spots.length` to wrap around; with six spots that would have walked onto the deep spot as a normal stop. `Court.rotationSpots` keeps the rotation on 0 to 4, and the deep spot is only reached through the hot streak code.
+
+## Points as the score (script.js, index.html)
+
+**What:** `stats.points` is now the game's score. A normal make adds 2 points, the deep shot in downtown countdown adds 3. `stats.madeShots` is still counted on every make (also the deep shot), but only to work out the shooting percentage. Both run starts (`startDowntownCountdown`, `startAroundTheWorld`) reset `points` to 0, the stats panel got a "Points" line (`#points`, filled in `updateStatsDisplay`), and the downtown countdown end screen shows the points instead of the made shots.
+
+**Why:** with the deep shot there are now makes worth different amounts, so counting makes no longer tells the score.
+
+**How it works:** in `checkMadeShot()` the counters every make shares (`madeShots`, `streak`) are raised first. Then the `if` picks the points: on a hot streak in downtown countdown the make was the deep shot (+3, the spot rotation does not move on), otherwise it is a normal make (+2, and `spotProgress` counts towards the next spot). Keeping `madeShots++` outside the `if` means a deep make also counts for the shooting percentage, which before it did not.
+
+## Performance mode checkbox (index.html)
+
+**What:** a checkbox labelled "performance mode" in the menu, under the three mode buttons (`#performanceMode` with the input `#performanceModeCheckbox`), with its own CSS. It only looks and clicks for now: nothing reads it yet.
+
+**Why:** the environment (street, buildings, track, stands) costs frame rate next to MoveNet. The checkbox is the switch to skip it on slow machines.
+
+**How it works:** the `<input>` sits inside the `<label>`, so clicking the text also ticks the box. `appearance: none` removes the browser's own checkbox, so the input can be drawn like the menu's buttons: a cream square with a dark border and the same stacked hard shadow (pink, then dark purple). The tick is the `::after` of the input: a narrow rectangle with only a right and a bottom border, turned 45 degrees, which makes a check mark. It is `scale(0)` (invisible) normally and grows to `scale(1)` on `:checked`, while the box turns lime. The label is skewed like the buttons, and the cream text gets a dark hard shadow so it reads on the blue menu.
+
+## Deep shot only checkbox (index.html)
+
+**What:** a second sticker checkbox, "deep shot only" (`#deepShotsOnly`, input `#deepShotOnlyCheckbox`), meant for free play only. It is in the HTML with the `hidden` attribute and placed top right in the game view, where the timer sits in the timed modes (free play hides the timer, so the spot is free). Showing it in free play and what it does is logic still to be written.
+
+**Why:** in free play you can practise the deep shot on its own.
+
+**How it works:** the checkbox CSS that was written for performance mode is now a class, `.stickerCheckbox`, so both checkboxes share one look (the cream box, the shadow, the lime tick) and only their positions differ: `#performanceMode` keeps a small top margin under the menu buttons, `#deepShotsOnly` is `position: absolute` in the top right. Because `.stickerCheckbox` sets `display: flex`, a CSS rule beats the browser's own `[hidden] { display: none }`, so `#deepShotsOnly[hidden] { display: none; }` is added to make `hidden = true` still hide it. It sits outside `#menu`, because the menu is hidden while playing.
+
+## Jump delay fix (script.js, handlePose)
+
+**What:** the delayed jump when the arms start rising works now. `jumpDelay` moved out of `handlePose` to a variable next to `poseUntil`, a new timer only starts when none is waiting and the player is not already jumping, and the waiting jump is cancelled when the arms go back to the default pose.
+
+**Why:** the old code called `clearTimeout(jumpDelay)` on the line right after `setTimeout`, so the timer was cancelled 0 ms after it started and the jump never happened.
+
+**How it works:** `setTimeout` returns an id that `clearTimeout` can cancel. Declared inside `handlePose` with `let`, that id was lost when the function ended, so it could only be cancelled immediately. At the top of the file it survives between pose frames. `jumpDelay === null` means "no jump waiting", so the `if` starts at most one timer; when the timer fires it sets `jumpDelay` back to `null` before calling `startJump()`. In the `def` branch (arms down) `clearTimeout(jumpDelay)` stops a jump that has not started yet, so lowering the arms within 200 ms cancels it. `clearTimeout(null)` does nothing, so that is safe when nothing is waiting.
+
+## In-game menu button (index.html, script.js)
+
+**What:** a "Menu" button in the game view (`#menuBtn`, top right corner; the timer and the deep shot checkbox moved down to `top: 9%` to sit under it) that goes back to the main menu at any moment, and a new function `goToMenu()` that the after game screen's Home button now uses too.
+
+**Why:** before, the only way back to the menu was finishing a run. Free play has no end, so it had no way back at all.
+
+**How it works:** `goToMenu()` does everything that leaving a run needs, in one place: `clearInterval(timeInterval)` stops a stopwatch or countdown that is still running (otherwise it would keep ticking, and a countdown would still end the run and open the after game screen while in the menu), the after game screen, the timer and the deep shot checkbox are hidden, `mode` and `runPhase` go back to `'menu'` and `'idle'` so no shots can be taken, `placeCamera(true)` sets the camera's goal to the menu pose (`Camera.menu`) so `smoothCamera` glides it back there, and `showMenu()` shows the menu and restarts its drawing loop. The Home button used to do part of this inline; now both buttons call the same function, so they cannot drift apart. The button sits in the HTML before `#menu`, so the full-screen menu covers it while it is open and it only shows during play.
+
+## goToMenu stops every timer (script.js)
+
+**What:** `goToMenu()` now cancels every timer that is still waiting: the run's stopwatch or 60 second countdown (`timeInterval`), the 3-2-1 countdown before a run (new variable `countdownTimeout`, filled in `showCountDown`), and a waiting jump (`jumpDelay`). It also hides the `#countdown` number.
+
+**Why:** pressing Menu during the 3-2-1 left the countdown running. When it finished, `startAroundTheWorld` / `startDowntownCountdown` carried on after their `await showCountDown(3)` and started a run behind the open menu, timer and all.
+
+**How it works:** `showCountDown` waits each second with `new Promise(resolve => setTimeout(resolve, 1000))`: the promise resolves when the timeout calls `resolve`. Its id is now stored in `countdownTimeout` (only one is waiting at a time, the countdown goes number by number). `clearTimeout(countdownTimeout)` cancels it, so `resolve` is never called and the promise stays pending: the code after `await` in the start function simply never runs, so the run is never started. A pending promise that nothing refers to any more is cleaned up by the browser, so nothing leaks. `clearTimeout` and `clearInterval` with an id that already fired or `undefined` do nothing, so `goToMenu` is safe to call at any moment, also from the after game screen.

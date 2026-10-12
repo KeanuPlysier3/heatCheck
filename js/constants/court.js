@@ -70,4 +70,10 @@ Court.spots = [
     makeArcSpot('top', 90),
     makeArcSpot('right wing', 135),
     makeCornerSpot('right corner', -1),
+    // index 5, not part of the rotation: the deep shot, straight in front of the hoop and way behind the line,
+    // worth extra points. only reached through a hot streak in downtown countdown
+    makeSpot('deep', 0, Court.Hoop.rimZ - 12.5), // 9.5 m from the rim, the arc spots are 7.25 m
 ];
+
+// how many spots the normal rotation walks through (0 to 4), so the deep spot at index 5 is never part of it
+Court.rotationSpots = 5;

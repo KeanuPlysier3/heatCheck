@@ -144,6 +144,79 @@
             }
         }
 
+        /* "PERFECT!" for a release in the green zone: the same lettering as "SHOT!", in lime, a little lower on the screen.
+           (no display is set here on purpose: script.js hides it with the hidden property) */
+        #shotPerfect {
+            position: fixed;
+            top: 34%;
+            left: 50%;
+            z-index: 5;
+            pointer-events: none;
+            font-family: "Bowlby One", Impact, "Arial Black", sans-serif;
+            font-size: clamp(2.8rem, 8vw, 7rem);
+            color: #B6F500;
+            -webkit-text-stroke: .055em #1B1030;
+            paint-order: stroke fill;
+            text-shadow: .02em .02em 0 #16C7B0, .04em .04em 0 #16C7B0, .06em .06em 0 #16C7B0, .08em .08em 0 #16C7B0,
+                .1em .1em 0 #1B1030, .12em .12em 0 #1B1030, .14em .14em 0 #1B1030;
+            --tilt: 4deg;
+            /* the resting angle: script.js sets a new random one for every shot */
+            transform: translateX(-50%) rotate(var(--tilt)) skewX(-8deg);
+            animation: perfect-show 1.3s forwards;
+            /* the whole life of the text is in this one animation: pop in, hold, fade out */
+        }
+
+        /* pops in big and swings past its angle (0 to 18%), settles (31%), stays (until 77%), then floats up and fades out.
+           it ends invisible, script.js only hides it when the animation is over */
+        @keyframes perfect-show {
+            0% {
+                transform: translateX(-50%) rotate(calc(var(--tilt) * -2.5)) skewX(-8deg) scale(2.6);
+                opacity: 0;
+                animation-timing-function: cubic-bezier(.2, 1.8, .4, 1);
+            }
+
+            18% {
+                transform: translateX(-50%) rotate(calc(var(--tilt) * 2)) skewX(-8deg) scale(.92);
+                opacity: 1;
+                animation-timing-function: ease-out;
+            }
+
+            31%,
+            77% {
+                transform: translateX(-50%) rotate(var(--tilt)) skewX(-8deg) scale(1);
+                opacity: 1;
+                animation-timing-function: ease-in;
+            }
+
+            100% {
+                transform: translate(-50%, -25%) rotate(var(--tilt)) skewX(-8deg) scale(1.25);
+                opacity: 0;
+            }
+        }
+
+        /* reduced motion: no movement, it only fades in and out (it still needs an animation, so that it gets hidden at the end) */
+        @keyframes perfect-show-still {
+
+            0% {
+                opacity: 0;
+            }
+
+            10%,
+            80% {
+                opacity: 1;
+            }
+
+            100% {
+                opacity: 0;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            #shotPerfect {
+                animation-name: perfect-show-still;
+            }
+        }
+
         /* the game stopwatch, top right: a yellow sticker, the mirror of the score board on the left.
            the script writes the elapsed time into #timerValue */
         /* display: flex below would win over the hidden attribute, so hidden is spelled out here */
@@ -455,7 +528,7 @@
             transform-origin: left bottom;
             -webkit-text-stroke: .055em #1B1030;
             paint-order: stroke fill;
-       
+
             /* stacked shadows make the extruded 3D letters: hot pink layers in front, dark purple at the back */
             text-shadow:
                 .02em .02em 0 #FF3D8B, .04em .04em 0 #FF3D8B, .06em .06em 0 #FF3D8B, .08em .08em 0 #FF3D8B, .1em .1em 0 #FF3D8B,
@@ -572,6 +645,16 @@
             transform: skewX(-8deg) rotate(1deg);
         }
 
+        /* the third mode: lime with a pink shadow, back in line like the first button (the second one is indented).
+           no transform here on purpose: a transform in an id rule would beat the hover and press motion */
+        #menu #downTownCountdownBtn {
+            --ext: #FF3D8B;
+            background-color: #B6F500;
+            /* lime */
+            white-space: nowrap;
+            /* the longest label: keep it on one line */
+        }
+
         #menu button:hover,
         #afterGame button:hover {
             transform: skewX(-8deg) translate(-.11em, -.11em) rotate(0deg);
@@ -592,6 +675,7 @@
         }
 
         @media (prefers-reduced-motion: reduce) {
+
             #menu button,
             #afterGame button {
                 transition: none;
@@ -615,7 +699,9 @@
             -webkit-backdrop-filter: blur(.75vw);
         }
 
-        #afterGame[hidden] {
+        #afterGame[hidden],
+        #afterGame button[hidden] {
+            /* the buttons have display: flex, which would win over the hidden attribute (the two retry buttons) */
             display: none;
         }
 
@@ -760,6 +846,8 @@
     </div>
 
     <div id="shotBanner" hidden>SHOT!</div>
+    <div id="shotFeedback" hidden></div>
+    <div id="shotPerfect" hidden>PERFECT!</div>
     <div id="countdown" hidden></div>
 
     <div id="timer" hidden>
@@ -775,6 +863,7 @@
             <div id="afterGame__buttons">
                 <button id="homeBtn">Home</button>
                 <button id="retry">Retry</button>
+                <button id="retry2">Retry</button>
             </div>
         </div>
     </div>
@@ -793,9 +882,11 @@
 
     <div id="menu">
         <div id="menu__buttons">
-            <h1 id="menu__logo" aria-label="heatCheck"><span class="heat">heat</span><span class="check">Check</span></h1>
+            <h1 id="menu__logo" aria-label="heatCheck"><span class="heat">heat</span><span class="check">Check</span>
+            </h1>
             <button id="freePlayBtn">FreePlay</button>
             <button id="aroundTheWorldBtn">Around the World</button>
+            <button id="downTownCountdownBtn">downtown countdown</button>
         </div>
         <canvas id="menu__canvas"></canvas>
     </div>

@@ -1,5 +1,15 @@
 // palette: late-90s cartoon skate park. loud opposite colours (orange/teal, pink/purple),
 // cream instead of pure white and dark purple instead of pure black
+// vibrant options for the player's colour, all of them loud against the teal court and the orange sky
+const playerColors = [
+  0xFF3D8B, // hot pink
+  0x9B5DE5, // electric violet
+  0xFFD400, // taxi yellow
+  0xFF2E4D, // cherry red
+  0x2F6BFF, // royal blue, deeper than the sky blue so it stands out on the teal court
+  0xB6F500, // lime
+];
+
 export const Colors = {
   background: 0xFFA552,
   blue: 0x01b7ff, // sunset orange sky
@@ -10,11 +20,11 @@ export const Colors = {
   hoopPole: 0xFFD400, // taxi yellow
   hoopBackboard: 0xFFF1D0, // cream
   hoop: 0xFF5A1F, // hot orange, the rim
-
+  playerColors, // the options to choose from
   net: 0xFFF1D0, // cream
   outline: 0x1B1030, // very dark purple
   accent: 0xB6F500, // lime green, for UI and details (not used yet)
-  player: 0xFF3D8B, // hot pink, for the player's head (not used yet)
+  player: playerColors[0], // the player's colour, the first option (hot pink) is the default
   basketball: 0xFF5F1F,
   fireBasketball: 0xfffff0,
   street: 0x2C2140, // dark purple asphalt, darker than the surround
@@ -41,7 +51,6 @@ export const Colors = {
   wallConcrete: 0x5E5BD1, // the mural wall, a purplish blue (was beige 0xE3CFA8)
   standFrame: 0x7A7290, // the bleachers' steps and railing, the same lilac grey as the fence posts
   standSeat: 0xFF3D8B, // the seat planks, the hot pink of the key (was the pole's yellow, 0xFFD400)
-  // teal, for the player's torso (not used yet)
 };
 
 export const SelfLight = 1;

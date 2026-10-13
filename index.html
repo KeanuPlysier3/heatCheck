@@ -656,6 +656,36 @@
             /* the longest label: keep it on one line */
         }
 
+        /* the colour arrows left and right of the player: small square versions of the menu buttons, only the triangle inside.
+           (no transform in these rules on purpose, so the hover and press motion of the buttons still works) */
+        #menu .menu__arrow {
+            --ext: #FF3D8B;
+            position: absolute;
+            top: calc(50% - 2.25vw);
+            /* half the height of the button, so it sits in the middle of the screen */
+            width: 4.5%;
+            aspect-ratio: 1;
+            min-width: 0;
+            padding: 0;
+            justify-content: center;
+            background-color: #B6F500;
+            /* lime */
+            font-size: clamp(1.8rem, 3.4vw, 3rem);
+        }
+
+        #menu #colorPrev {
+            left: 46%;
+        }
+
+        #menu #colorNext {
+            left: 83%;
+        }
+
+        /* the base triangle points right, the previous button flips it */
+        #menu #colorPrev::after {
+            transform: scaleX(-1);
+        }
+
         #menu button:hover,
         #afterGame button:hover {
             transform: skewX(-8deg) translate(-.11em, -.11em) rotate(0deg);
@@ -1034,6 +1064,8 @@
             </label>
         </div>
         <canvas id="menu__canvas"></canvas>
+        <button id="colorPrev" class="menu__arrow" aria-label="Previous colour"></button>
+        <button id="colorNext" class="menu__arrow" aria-label="Next colour"></button>
     </div>
 
     <div id="loading__container">

@@ -500,6 +500,78 @@
             transform: rotate(3.5deg);
         }
 
+        /* the name field above the character: a cream sticker with a small pink tag, tilted like the canvas below it */
+        #menu__name {
+            position: absolute;
+            top: 6%;
+            left: 65%;
+            /* the middle of the canvas (left 50% + half of its 30% width) */
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            transform: translateX(-50%) rotate(-2deg);
+        }
+
+        /* the tag sticking out above the field */
+        .menu__nameTag {
+            margin: 0 0 -.25em .8em;
+            /* overlaps the field a little, like a sticker on a sticker */
+            padding: .1em .6em;
+            position: relative;
+            z-index: 1;
+            font-family: "Bowlby One", Impact, "Arial Black", sans-serif;
+            font-size: clamp(.75rem, 1.1vw, 1rem);
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            color: #FFF1D0;
+            background: #FF3D8B;
+            border: .16em solid #1B1030;
+            transform: rotate(-4deg);
+        }
+
+        #usernameInput {
+            width: clamp(11em, 18vw, 16em);
+            padding: .35em .7em;
+            font-family: "Bowlby One", Impact, "Arial Black", sans-serif;
+            font-size: clamp(1.1rem, 1.8vw, 1.6rem);
+            letter-spacing: .03em;
+            text-transform: uppercase;
+            color: #1B1030;
+            background-color: #FFF1D0;
+            /* cream */
+            background-image: radial-gradient(rgba(27, 16, 48, .1) 22%, transparent 24%);
+            background-size: .3em .3em;
+            /* the same halftone dots as the buttons, fainter so the text reads */
+            border: .16em solid #1B1030;
+            border-radius: 0;
+            box-shadow: .11em .11em 0 #16C7B0, .22em .22em 0 #16C7B0, .33em .33em 0 #1B1030;
+            outline: none;
+            transform: skewX(-8deg);
+            transition: box-shadow .1s, transform .1s;
+        }
+
+        #usernameInput::placeholder {
+            color: rgba(27, 16, 48, .4);
+        }
+
+        /* typing: the field lifts off its shadow, like a hovered button */
+        #usernameInput:focus {
+            transform: skewX(-8deg) translate(-.08em, -.08em);
+            box-shadow: .16em .16em 0 #FF3D8B, .32em .32em 0 #FF3D8B, .48em .48em 0 #1B1030;
+        }
+
+        /* a name with other characters than letters and numbers: the shadow turns orange as a hint */
+        #usernameInput:not(:placeholder-shown):invalid {
+            box-shadow: .11em .11em 0 #FF5A1F, .22em .22em 0 #FF5A1F, .33em .33em 0 #1B1030;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            #usernameInput {
+                transition: none;
+            }
+        }
+
         #menu__buttons {
             display: flex;
             flex-direction: column;
@@ -705,6 +777,19 @@
             outline-offset: .16em;
         }
 
+        /* disabled: a faded, grey sticker pressed flat onto the page. no shadow to lift off, no hover, no press */
+        #menu button:disabled,
+        #afterGame button:disabled,
+        #menuBtn:disabled {
+            filter: grayscale(1);
+            /* a filter, not a new background colour: it greys every button, whatever colour its own rule gives it */
+            opacity: .55;
+            box-shadow: .11em .11em 0 #1B1030;
+            cursor: not-allowed;
+            pointer-events: none;
+            /* the mouse no longer reaches it, so the hover and press styles cannot start */
+        }
+
         @media (prefers-reduced-motion: reduce) {
 
             #menu button,
@@ -858,6 +943,103 @@
             background: rgba(27, 16, 48, .55);
             backdrop-filter: blur(.75vw);
             -webkit-backdrop-filter: blur(.75vw);
+        }
+
+        /* the leaderboard: a cream sticker card in the bottom right, during a run and on the after game screen.
+           an ordered list drawn as a table: every row is a grid with the same three columns as the header */
+        #leaderboard {
+            position: fixed;
+            right: 7.5%;
+            /* left of the shot meter, which stands against the right edge */
+            bottom: 4%;
+            z-index: 7;
+            /* in front of the after game screen (6), so it stays readable there */
+            width: clamp(15em, 22vw, 20em);
+            padding: .7em .9em .8em;
+            font-family: "Bowlby One", Impact, "Arial Black", sans-serif;
+            color: #1B1030;
+            background-color: #FFF1D0;
+            background-image: radial-gradient(rgba(27, 16, 48, .1) 22%, transparent 24%);
+            background-size: .5em .5em;
+            border: .22em solid #1B1030;
+            box-shadow: .18em .18em 0 #16C7B0, .36em .36em 0 #16C7B0, .54em .54em 0 #1B1030;
+            transform: rotate(1.5deg);
+        }
+
+        #leaderboard__title {
+            margin: 0 0 .35em;
+            font-size: clamp(1.1rem, 1.7vw, 1.5rem);
+            font-weight: 400;
+            letter-spacing: .03em;
+            text-transform: uppercase;
+        }
+
+        /* the three columns, shared by the header and every row: rank, name (takes the room that is left), result */
+        #leaderboard__head,
+        #leaderboard__list li {
+            display: grid;
+            grid-template-columns: 2em 1fr auto;
+            gap: .5em;
+            align-items: center;
+            padding: .18em .45em;
+        }
+
+        #leaderboard__head {
+            font-size: clamp(.65rem, .85vw, .8rem);
+            letter-spacing: .06em;
+            text-transform: uppercase;
+            color: #FFF1D0;
+            background: #1B1030;
+        }
+
+        #leaderboard__list {
+            margin: 0;
+            padding: 0;
+            list-style: none;
+            /* the numbers are drawn by the counter below, so they can sit in their own column */
+            counter-reset: rank;
+            font-size: clamp(.8rem, 1.05vw, 1rem);
+        }
+
+        #leaderboard__list li {
+            counter-increment: rank;
+            border-bottom: .1em solid rgba(27, 16, 48, .25);
+        }
+
+        #leaderboard__list li::before {
+            content: counter(rank);
+            /* the rank, in the first column */
+        }
+
+        /* striped rows, like a table */
+        #leaderboard__list li:nth-child(even) {
+            background: rgba(27, 16, 48, .08);
+        }
+
+        /* the best one in taxi yellow */
+        #leaderboard__list li:first-child {
+            background: #FFD400;
+        }
+
+        /* the player's own rows, in hot pink */
+        #leaderboard__list li.is-me {
+            color: #FFF1D0;
+            background: #FF3D8B;
+        }
+
+        #leaderboard__list .leaderboard__name {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            text-transform: uppercase;
+        }
+
+        #leaderboard__status {
+            margin: .5em 0 0;
+            font-size: clamp(.75rem, 1vw, .95rem);
+            letter-spacing: .03em;
+            text-transform: uppercase;
+            opacity: .7;
         }
 
         #afterGame[hidden],
@@ -1025,9 +1207,28 @@
                 <button id="homeBtn">Home</button>
                 <button id="retry">Retry</button>
                 <button id="retry2">Retry</button>
+                <button type="button" id="uploadScoreBtn">Upload score</button>
             </div>
         </div>
     </div>
+
+    <!-- the online top 10 of the mode being played, filled by loadLeaderboard in script.js.
+         on screen during the whole run and on the after game screen, hidden in the menu and in free play -->
+    <section id="leaderboard" hidden>
+        <h3 id="leaderboard__title">Top 10</h3>
+        <div id="leaderboard__head"><span>#</span><span>name</span><span id="leaderboard__unit">points</span></div>
+        <ol id="leaderboard__list"></ol>
+        <p id="leaderboard__status" hidden></p>
+    </section>
+
+        <form method="POST" action id="afterGame__form" hidden >
+            <label for="name">Name</label>
+            <input type="hidden" id="name" name="name">
+            <input type="hidden" id="score" name="score">
+            <input type="hidden" id="mode" name="mode">
+        </form>
+
+       
 
     <div id="stats">
         <p>Points: <span id="points">0</span></p>
@@ -1042,13 +1243,11 @@
     </div>
     <canvas id="c"></canvas>
 
-    <!-- free play only: hidden until free play starts -->
     <label id="deepShotsOnly" class="stickerCheckbox" hidden >
         <input type="checkbox" id="deepShotOnlyCheckbox">
         <span>deep shot only</span>
     </label>
 
-    <!-- in game: back to the menu. the menu covers it while it is open -->
     <button id="menuBtn">Menu</button>
 
     <div id="menu">
@@ -1063,13 +1262,18 @@
                 <span>performance mode</span>
             </label>
         </div>
+        <!-- the player's name, above the character: used for the online leaderboard -->
+        <label id="menu__name">
+            <span class="menu__nameTag">player</span>
+            <input type="text" id="usernameInput" placeholder="your name" maxlength="16" pattern="[A-Za-z0-9]{1,16}"
+                autocomplete="nickname" spellcheck="false">
+        </label>
         <canvas id="menu__canvas"></canvas>
         <button id="colorPrev" class="menu__arrow" aria-label="Previous colour"></button>
         <button id="colorNext" class="menu__arrow" aria-label="Next colour"></button>
     </div>
 
     <div id="loading__container">
-
         <div id="loading__basketball"></div>
         <div id="loading">Loading…</div>
     </div>

@@ -1740,3 +1740,109 @@ The numbers come from the same `Fence` constants as the drawn fence, so the mesh
 **Why:** pressing Menu during the 3-2-1 left the countdown running. When it finished, `startAroundTheWorld` / `startDowntownCountdown` carried on after their `await showCountDown(3)` and started a run behind the open menu, timer and all.
 
 **How it works:** `showCountDown` waits each second with `new Promise(resolve => setTimeout(resolve, 1000))`: the promise resolves when the timeout calls `resolve`. Its id is now stored in `countdownTimeout` (only one is waiting at a time, the countdown goes number by number). `clearTimeout(countdownTimeout)` cancels it, so `resolve` is never called and the promise stays pending: the code after `await` in the start function simply never runs, so the run is never started. A pending promise that nothing refers to any more is cleaned up by the browser, so nothing leaks. `clearTimeout` and `clearInterval` with an id that already fired or `undefined` do nothing, so `goToMenu` is safe to call at any moment, also from the after game screen.
+
+## Username field in the menu (index.html)
+
+**What:** a text field above the character in the main menu (`#usernameInput` inside the label `#menu__name`), with a small pink "PLAYER" tag on top. Nothing reads it yet: it is where the player will type the name for the online leaderboard.
+
+**Why:** the leaderboard needs a name per upload. Asking once in the menu means the player does not have to type it after every round.
+
+**How it works:**
+
+- **Place:** the label is `position: absolute` in `#menu`, at `left: 65%`, the middle of the character's canvas (the canvas starts at 50% and is 30% wide), and `translateX(-50%)` centres it on that point. `top: 6%` puts it just above the canvas (which starts at 10%), and `z-index: 1` keeps it in front of the canvas where they overlap.
+- **Look:** the field uses the menu's sticker style: the Bowlby One font in capitals, a cream background with faint halftone dots, a dark border, and a stacked hard shadow (teal, then dark purple), skewed like the buttons. The "PLAYER" tag is a small pink sticker that overlaps the field's top edge (negative bottom margin).
+- **Feedback:** on `:focus` the field lifts off its shadow and the shadow turns pink, like a hovered button. `:invalid` (with `:not(:placeholder-shown)`, so an empty field is not marked) turns the shadow orange when the name breaks the pattern.
+- **Rules in the HTML:** `maxlength="16"` stops typing after 16 characters (the `VARCHAR(16)` in the table), and `pattern="[A-Za-z0-9]{1,16}"` only accepts letters and numbers. These are only for the player's convenience: `scores.php` must check the same again, because the browser's checks can be bypassed.
+
+## Score upload fixed, and scores.php (db.js, script.js, constants/api.js, server/)
+
+**What:**
+
+- `js/constants/api.js` (new): `Api.scoresUrl`, the full address of `scores.php` on Combell.
+- `js/db.js`:
+  - `uploadScore(formData)` now posts the `FormData` straight to that address, without headers.
+  - `fetchScores(mode)` does a plain GET with the mode in the URL.
+- `js/script.js`:
+  - `setData()` finds the form by its id, sends the mode as its id (`downtownCountdown` / `aroundTheWorld`), and takes the around the world time from the new `stats.finalTime`.
+  - The upload button shows "Sending…", "Uploaded!" or "Failed, retry". It cannot be clicked twice, and `resetUploadButton()` makes it usable again at the end of every round.
+- `server/scores.php` (new): the PHP that receives scores and returns the top 10.
+- `server/config.example.php` (new): the shape of the database login file.
+- `.gitignore`: added `server/config.php`, so a real login copied into the project is never committed.
+
+**Why:**
+
+- The fetches used `/api/score`, a path on GitHub Pages, where no PHP runs (404).
+- Around the world always uploaded 0, because `endTimer` reset `stopWatch` before the upload.
+- The mode was read from a hidden input that was never filled, so every upload said "Around the World".
+- Sending JSON with a `Content-Type` header made the browser send an extra OPTIONS request first.
+- There was no feedback, and a click could upload the same round many times.
+
+**How it works:**
+
+- **Where the request goes:** the game (GitHub Pages) and the API (Combell) are on different domains, so the URL has to be complete. It is a constant, not a `.env` value: it is not secret, and the GitHub Actions build has no `.env`.
+- **FormData:** a `FormData` body counts as a "simple" request for CORS, so the browser sends the POST directly with no preflight, and PHP gets the fields in `$_POST`.
+- **The time:** `endTimer` copies the time into `stats.finalTime` before resetting `stopWatch`.
+- **Upload button:** it is disabled while sending and after a success. On an error it is enabled again so the player can retry. `await` with `try/catch` catches both network errors and the `{ ok: false }` answers.
+- **scores.php, CORS:** the `Access-Control-Allow-Origin` header is only sent for the game's own addresses (GitHub Pages and `localhost:5173`). Without it, the browser does not give the answer to the page.
+- **scores.php, database login:** the login comes from `config.php` in the hosting's home folder, outside `www`, so no browser can open it.
+- **scores.php, GET:** returns the top 10 of a mode, highest points or fastest time first. The column name comes from a fixed list (`MODES`), never from the request.
+- **scores.php, POST:**
+  - Checks the name (1 to 16 letters or numbers), the mode, and the score's range (points 0 to 200, a time 1 to 3600 seconds).
+  - Saves with a prepared statement: the values are sent separately from the SQL text, which is what makes SQL injection impossible.
+  - Turns the mode into the two 0/1 columns and puts the score in `points` or `time_seconds`.
+
+## Leaderboard address from an environment variable (constants/api.js, .env, deploy.yml)
+
+**What:** `Api.scoresUrl` is no longer written in the code. It reads `import.meta.env.VITE_SCORES_URL`. Locally that value is in `.env`, `.env.example` shows the name, and the GitHub Pages workflow passes it to the build from a repository variable.
+
+**Why:** the address can change (another domain, a test server) without touching the code, and every place that needs it reads the same value.
+
+**How it works:**
+
+- **How Vite reads it:** Vite reads `.env` when it starts (`npm run dev`) or builds. Only variables whose name starts with `VITE_` reach the game's code, as `import.meta.env.VITE_...`. That prefix is Vite's safety rule, so a database password in the same file can never leak into the game by accident.
+- **It is public:** in the build, Vite pastes the value straight into the JavaScript. So a `VITE_` value is visible to anyone, which is fine for an address but never for a secret.
+- **On GitHub:** `.env` is in `.gitignore`, so GitHub's build machine does not have it. The Build step in `deploy.yml` gets an `env:` entry that sets `VITE_SCORES_URL` from `vars.VITE_SCORES_URL`, a repository variable set under Settings > Secrets and variables > Actions > Variables. Vite reads environment variables from the system the same way as from `.env`.
+- **After a change:** Vite only reads `.env` at start, so the dev server must be restarted.
+
+## Leaderboard on the after game screen (index.html, script.js)
+
+**What:** a top 10 card in the bottom right of the after game screen (`#leaderboard`), showing the online scores of the mode that was just played. New in `script.js`: `loadLeaderboard(mode)` and the small helper `formatTime(seconds)`.
+
+**Why:** uploading a score only means something when you can see where it lands.
+
+**How it works:**
+
+- **When it loads:** `endTimer` and `endCountdownTimer` call `loadLeaderboard(mode)` when the round ends, and the upload button calls it again after a successful upload so the new row appears. It is not loaded in `init` (it would be out of date after the first upload) and not at the start of a mode (nobody sees it while playing).
+- **Not awaited:** the end-of-round functions call it without `await`, so the after game screen shows at once and the list fills in when Combell answers.
+- **Per mode:** `fetchScores(mode)` asks `scores.php` for that mode only. For around the world the title is "Fastest times", the column says "time" and `formatTime` turns the seconds into `m:ss`. For downtown countdown it is "Top scores" and "points".
+- **Building the rows:** the old rows are removed with `replaceChildren()`, then one `<li>` per score is made with `createElement`, holding two `<span>`s (name and result). The text goes in with `textContent`, never `innerHTML`, so a name is always shown as plain text and can never become HTML.
+- **Own rows:** a row whose name equals the saved username (compared in lower case) gets the class `is-me` and turns pink.
+- **Status line:** "Loading…" while waiting, "No scores yet, be the first!" for an empty list, "Leaderboard unavailable" when the request fails. The function catches its own errors, so a server that is down never breaks the game.
+- **An `<ol>` that looks like a table:** the list has `list-style: none`, and each `<li>` is a CSS grid with three columns (`2em 1fr auto`: rank, name, result). The header row above it uses the same grid, so the columns line up. The rank is drawn by a CSS counter (`counter-increment` on each row, shown in `li::before`), which puts the number in its own column. Even rows are striped, the first place is yellow.
+- **Place:** the card is inside `#afterGame` with `position: absolute`, `right` and `bottom`, so it shows and hides together with that screen.
+
+## Leaderboard visible during the whole run (index.html, script.js)
+
+**What:** the leaderboard card is now on screen from the moment a timed mode starts, not only on the after game screen. New function `showLeaderboard(mode)`. The card moved out of `#afterGame` in the HTML and starts `hidden`.
+
+**Why:** the scores to beat should be visible while playing.
+
+**How it works:**
+
+- **Showing:** `handleAroundTheWorldClick` and `handleDowntownCountdownClick` call `showLeaderboard()` with their mode. It unhides the card and calls `loadLeaderboard`, so the list is that mode's top 10. The mode is passed as text, because the `mode` variable is only set a moment later in the start functions.
+- **Refreshing:** unchanged. `loadLeaderboard(mode)` still runs when the round ends and after an upload, so the list is fresh at the moments it matters.
+- **Hiding:** `goToMenu()` and `handleFreeplayClick()` set `hidden = true`. Free play has no scores, and in the menu the card would sit on top of the menu.
+- **Place:** the card was a child of `#afterGame`, so it could only show with that screen. Now it stands on its own, with `position: fixed` (placed against the window) and `z-index: 7`, one above the after game screen's 6, so it stays in front of that screen's blurred layer. `right: 7.5%` keeps it left of the shot meter on the right edge.
+
+## Disabled state for the buttons (index.html, script.js)
+
+**What:** a `:disabled` style for the menu buttons, the after game buttons and the in-game Menu button: grey, faded, with a flat shadow, and no hover or press effect. In `script.js` the line `uploadBtn.classList.add('disabled')` was removed.
+
+**Why:** the upload button is disabled while sending and after a successful upload, but it looked exactly like a button that still works.
+
+**How it works:**
+
+- **`:disabled`** is a CSS state the browser switches on by itself for a button with `disabled = true`, and off again with `disabled = false`. No class is needed. The removed `classList.add('disabled')` was never taken off again, so a class-based style would have stayed grey for every later round.
+- **`filter: grayscale(1)`** removes the colour from the whole button. A filter is used instead of a grey `background-color`, because some buttons get their colour from an id rule (`#menu #aroundTheWorldBtn`), which would win over a `:disabled` rule. A filter applies on top of whatever colour the button has.
+- **`opacity: .55`** fades it, and the stacked shadow is replaced by one thin dark layer, so the button looks pressed flat instead of liftable.
+- **`pointer-events: none`** means the mouse does not reach the button at all, so the `:hover` and `:active` styles cannot start. Keyboard use is already blocked by `disabled` itself.

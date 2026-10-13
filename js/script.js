@@ -19,6 +19,7 @@ import { Meter } from './constants/meter.js';
 import { Camera } from './constants/camera.js';
 import { createMenu, hideMenu, showMenu } from './menu.js';
 import { resizeRendererToDisplaySize } from './helpers/resizeRenderer.js';
+import { uploadScore, fetchScores } from './db.js';
 import { math } from '@tensorflow/tfjs-core';
 import { draw } from '@tensorflow/tfjs-core/dist/ops/browser.js';
 
@@ -58,6 +59,7 @@ let meterElement, meterFill, meterGreen; // the bar's elements, filled in init
 
 let stats = {
     points: 0,
+    finalTime: 0, // seconds of the last around the world run, kept for the upload (stopWatch is reset at the end)
     shots: 0,
     madeShots: 0,
     shootingPercentage: 0,
@@ -430,7 +432,14 @@ const updateStatsDisplay = () => {
 
 
 // back to the main menu, from the after game screen or in the middle of a run
+// shows the leaderboard card with the top 10 of a mode: called when a run starts
+const showLeaderboard = (leaderboardMode) => {
+    document.getElementById('leaderboard').hidden = false;
+    loadLeaderboard(leaderboardMode); // not awaited: the run starts at once, the list fills in when the answer arrives
+};
+
 const goToMenu = () => {
+    document.getElementById('leaderboard').hidden = true;
     // stop every timer that could still change the game after leaving it
     clearInterval(timeInterval);      // the stopwatch or the 60 second countdown of a run that is still going
     clearTimeout(countdownTimeout);   // the 3-2-1: its promise never resolves now, so the run after the await never starts
@@ -449,6 +458,7 @@ const goToMenu = () => {
 
 //GAME MODES
 const handleFreeplayClick = () => {
+    document.getElementById('leaderboard').hidden = true; // free play has no scores to compare
     document.querySelector('#deepShotsOnly').hidden = false;
     mode = 'freePlay';
     runPhase = 'playing';   // free play has no countdown
@@ -458,6 +468,7 @@ const handleFreeplayClick = () => {
 };
 
 const handleAroundTheWorldClick = () => {
+    showLeaderboard('aroundTheWorld');
     document.querySelector('#deepShotsOnly').hidden = true;
     hideMenu();
     placeCamera(); // move the camera to the current spot's position
@@ -465,6 +476,7 @@ const handleAroundTheWorldClick = () => {
 };
 
 const handleDowntownCountdownClick = () => {
+    showLeaderboard('downtownCountdown');
     document.querySelector('#deepShotsOnly').hidden = true;
     hideMenu();
     placeCamera(); // move the camera to the current spot's position
@@ -518,9 +530,12 @@ const endTimer = () => {
     clearInterval(timeInterval);
     const currentTime = stopWatch;
     console.log(`Time's up! Final time: ${currentTime} seconds`);
+    stats.finalTime = currentTime; // kept for the upload, stopWatch is reset on the next line
     stopWatch = 0;
     runPhase = 'finished';
 
+    resetUploadButton();
+    loadLeaderboard(mode); // not awaited: the screen shows at once, the list fills in when the answer arrives
     document.getElementById('afterGame').hidden = false; // show the after game screen when the run ends
     document.getElementById('retry').hidden = false; // show the retry button for around the world
     document.getElementById('retry2').hidden = true; // show the retry button for downtown countdown
@@ -560,6 +575,8 @@ const endCountdownTimer = () => {
 
     stopWatch = 0;
     runPhase = 'finished';
+    resetUploadButton();
+    loadLeaderboard(mode); // not awaited: the screen shows at once, the list fills in when the answer arrives
     document.getElementById('retry').hidden = true; // show the retry button for around the world
     document.getElementById('retry2').hidden = false; // show the retry button for downtown countdown
     document.getElementById('afterGame').hidden = false; // show the after game screen when the run ends
@@ -602,6 +619,27 @@ const setEvents = () => {
         document.querySelector('#performanceModeCheckbox').checked = true;
     }
 
+    const usernameInput = document.querySelector('#usernameInput');
+    usernameInput.addEventListener('input', () => {
+        const username = usernameInput.value.trim();
+        localStorage.setItem('username', username);
+    });
+
+    const uploadBtn = document.querySelector('#uploadScoreBtn');
+
+    uploadBtn.addEventListener('click', async () => {
+        uploadBtn.disabled = true; // no second click while sending (the :disabled css greys it out)
+        uploadBtn.textContent = 'Sending…';
+        try {
+            await uploadScore(setData());
+            uploadBtn.textContent = 'Uploaded!'; // stays disabled: this round is in
+            loadLeaderboard(mode); // again, so the new score shows up in the list
+        } catch (error) {
+            console.error('Error uploading score:', error);
+            uploadBtn.textContent = 'Failed, retry';
+            uploadBtn.disabled = false; // let the player try again
+        }
+    });
 
 
     document.querySelector('#freePlayBtn').addEventListener('click', handleFreeplayClick);
@@ -654,6 +692,9 @@ const setEvents = () => {
 };
 
 const init = async () => {
+
+    const usernameInput = document.querySelector('#usernameInput');
+    usernameInput.value = localStorage.getItem('username') || '';
     meterElement = document.querySelector('#meter');
     meterGreen = document.querySelector('#meterGreen');
     meterFill = document.querySelector('#meterFill');
@@ -808,6 +849,72 @@ function makeAxisGrid(node, label, units) {
     gui.add(helper, 'visible').name(label); // a checkbox bound to helper.visible, shown with this label
 }
 
+
+//DATA
+// seconds as m:ss, for the around the world times
+const formatTime = (seconds) => `${Math.floor(seconds / 60)}:${(seconds % 60).toString().padStart(2, '0')}`;
+
+
+const loadLeaderboard = async (leaderboardMode) => {
+    const list = document.getElementById('leaderboard__list');
+    const status = document.getElementById('leaderboard__status');
+    const isTime = leaderboardMode === 'aroundTheWorld';
+
+    document.getElementById('leaderboard__title').textContent = isTime ? 'Fastest times' : 'Top scores';
+    document.getElementById('leaderboard__unit').textContent = isTime ? 'time' : 'points';
+    status.textContent = 'Loading…';
+    status.hidden = false;
+
+    try {
+        const { scores } = await fetchScores(leaderboardMode);
+        const myName = (localStorage.getItem('username') || '').toLowerCase();
+
+        list.replaceChildren(); 
+        scores.forEach((row) => {
+            const item = document.createElement('li');
+            const name = document.createElement('span');
+            const score = document.createElement('span');
+            name.className = 'leaderboard__name';
+            name.textContent = row.name; 
+            score.textContent = isTime ? formatTime(Number(row.score)) : row.score;
+            item.append(name, score);
+            list.append(item);
+        });
+
+        status.textContent = 'No scores yet, be the first!';
+        status.hidden = scores.length > 0;
+    } catch (error) {
+        console.error('Error loading the leaderboard:', error);
+        list.replaceChildren();
+        status.textContent = 'Leaderboard unavailable';
+    }
+};
+
+// a new round can be uploaded again: the button back to its start state
+const resetUploadButton = () => {
+    const uploadBtn = document.querySelector('#uploadScoreBtn');
+    uploadBtn.disabled = false;
+    uploadBtn.textContent = 'Upload score';
+};
+
+const setData = () => {
+    const form = document.querySelector('#afterGame__form');
+    const formData = new FormData(form);
+
+
+    const setName = localStorage.getItem('username') ? localStorage.getItem('username').trim() : 'anonymous';
+
+    formData.set('name', setName);
+
+    // the mode as its id, exactly what scores.php checks against: 'downtownCountdown' or 'aroundTheWorld'
+    formData.set('mode', mode);
+
+    // the result: points for downtown countdown, the finished time for around the world
+    const formattedScore = mode === 'downtownCountdown' ? stats.points : stats.finalTime;
+    formData.set('score', formattedScore);
+
+    return formData;
+};
 
 //RENDER LOOP
 

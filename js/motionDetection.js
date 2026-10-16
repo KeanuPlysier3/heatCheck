@@ -189,7 +189,6 @@ const updateShot = (side, arm, now) => {
     }
 
 
-    //shot only possible if state holds a loaded arm and it was recent enough.
     if (arm.released) {
         shotState.loadedAt.left = null; 
         shotState.loadedAt.right = null;
@@ -198,7 +197,7 @@ const updateShot = (side, arm, now) => {
     }
 };
 
-// the one event every input will end in. here it only shows the shot; in the game it starts the shot
+
 const shotReleased = (time, side) => {
     shotState.count++;
     console.log(`SHOT #${shotState.count} with the ${side} arm at ${(time / 1000).toFixed(2)} s`);

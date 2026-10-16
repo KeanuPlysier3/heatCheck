@@ -6,14 +6,15 @@ import { createOutlineMesh } from '../helpers/outline';
 import { Court } from '../constants/court';
 
 
+export const playerMaterial = new THREE.MeshBasicMaterial({ color: Colors.player });
+
 export const createPlayer = () => {
     const joints = { left: {}, right: {} };
     const player = new THREE.Object3D();
 
 
-    const headMaterial = new THREE.MeshBasicMaterial({ color: Colors.player });
     const headGeometry = new THREE.SphereGeometry(Player.headRadius, 32, 32);
-    const headMesh = new THREE.Mesh(headGeometry, headMaterial);
+    const headMesh = new THREE.Mesh(headGeometry, playerMaterial);
     headMesh.position.set(0, Player.headY, 0);
     headMesh.castShadow = true;
     player.add(headMesh);
@@ -24,9 +25,8 @@ export const createPlayer = () => {
     headMesh.add(headOutlineMesh);
 
  
-    const torsoMaterial = new THREE.MeshBasicMaterial({ color: Colors.player });
     const torsoGeometry = new THREE.BoxGeometry(Player.torsoWidth, Player.torsoHeight, Player.torsoDepth);
-    const torsoMesh = new THREE.Mesh(torsoGeometry, torsoMaterial);
+    const torsoMesh = new THREE.Mesh(torsoGeometry, playerMaterial);
     torsoMesh.position.set(0, Player.hipY + Player.torsoHeight / 2, 0);
     torsoMesh.castShadow = true;
     player.add(torsoMesh);
@@ -39,9 +39,8 @@ export const createPlayer = () => {
     const legWidth = Player.legRadius * 2; 
     [Player.legSpacing, -Player.legSpacing].forEach((x) => {
 
-        const legMaterial = new THREE.MeshBasicMaterial({ color: Colors.player });
         const legGeometry = new THREE.BoxGeometry(legWidth, Player.legLength, legWidth);
-        const legMesh = new THREE.Mesh(legGeometry, legMaterial);
+        const legMesh = new THREE.Mesh(legGeometry, playerMaterial);
         legMesh.position.set(x, Player.hipY - Player.legLength / 2, 0);
         legMesh.castShadow = true;
         player.add(legMesh);
@@ -52,9 +51,8 @@ export const createPlayer = () => {
         legMesh.add(legOutlineMesh);
 
      
-        const footMaterial = new THREE.MeshBasicMaterial({ color: Colors.player });
         const footGeometry = new THREE.BoxGeometry(Player.footWidth, Player.footHeight, Player.footLength);
-        const footMesh = new THREE.Mesh(footGeometry, footMaterial);
+        const footMesh = new THREE.Mesh(footGeometry, playerMaterial);
         footMesh.position.set(x, Player.footHeight / 2, (Player.footLength - legWidth) / 2);
         footMesh.castShadow = true;
         player.add(footMesh);
@@ -72,9 +70,8 @@ export const createPlayer = () => {
         shoulder.position.set(x, Player.shoulderY, 0);
         player.add(shoulder);
 
-        const upperArmMaterial = new THREE.MeshBasicMaterial({ color: Colors.player });
         const upperArmGeometry = new THREE.BoxGeometry(armWidth, Player.upperArmLength, armWidth);
-        const upperArmMesh = new THREE.Mesh(upperArmGeometry, upperArmMaterial);
+        const upperArmMesh = new THREE.Mesh(upperArmGeometry, playerMaterial);
         upperArmMesh.position.y = -Player.upperArmLength / 2; // half its length below the shoulder, so its top is at the joint
         upperArmMesh.castShadow = true;
         shoulder.add(upperArmMesh);
@@ -88,9 +85,8 @@ export const createPlayer = () => {
         elbow.position.y = -Player.upperArmLength; // the bottom end of the upper arm
         shoulder.add(elbow);
 
-        const lowerArmMaterial = new THREE.MeshBasicMaterial({ color: Colors.player });
         const lowerArmGeometry = new THREE.BoxGeometry(armWidth, Player.forearmLength, armWidth);
-        const lowerArmMesh = new THREE.Mesh(lowerArmGeometry, lowerArmMaterial);
+        const lowerArmMesh = new THREE.Mesh(lowerArmGeometry, playerMaterial);
         lowerArmMesh.position.y = -Player.forearmLength / 2; // half its length below the elbow
         lowerArmMesh.castShadow = true;
         elbow.add(lowerArmMesh);

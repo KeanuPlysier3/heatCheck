@@ -6,7 +6,7 @@ import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'; // DEBUG ONLY, see the orbit camera block in init
 import { createCourt } from './objects/court';
 import { createEnvironment } from './environment';
-import { createPlayer } from './objects/player';
+import { createPlayer, playerMaterial } from './objects/player';
 import { Court } from './constants/court';
 import { createHoop } from './objects/hoop';
 import { Colors } from './constants/colors';
@@ -92,7 +92,7 @@ let jumpVelocity = 0;   // how fast the player is moving up (negative: down) dur
 
 let targetPose = Player.poses.default;
 
-//MOVEMENT FUNCTIONS
+//MOVEMENT 
 const poseHold = {
     default: 300,
     loaded: 300,
@@ -207,7 +207,7 @@ const startMeter = () => {
     meterValue = 0;
 };
 
-// starts the PERFECT! animation (the css does the pop-in, the waiting and the fade-out)
+// starts the PERFECT!
 const showPerfect = () => {
     const perfectElement = document.getElementById('shotPerfect');
     const tilt = (3 + Math.random() * 6) * (Math.random() < 0.5 ? -1 : 1);   // 3 to 9 degrees, to the left or the right
@@ -221,11 +221,6 @@ const showPerfect = () => {
 const releaseMeter = () => {
     if (shotPhase !== 'aiming') return;  // nothing to release
     console.log('released at', meterValue.toFixed(2));
-
-    //     duration: 1.0,      // seconds to fill from 0 to 1
-    // greenCentre: 0.75,  // where the green zone sits
-    // greenWidth: 0.15,   // its size: the forgiving buffer from your plan, in one value
-    // maxError: 0.25,     // how wrong the worst release is
 
     let greenBottom, greenTop;
     if (mode === 'downtownCountdown' && stats.hotstreak) {
@@ -594,6 +589,17 @@ const drawGreen = (width = Meter.greenWidth) => {
 
 
 
+//PLAYER COLOUR
+let colorIndex = 0;   // which of Colors.playerColors the player has, 0 is the default
+
+// step is 1 for the next colour and -1 for the previous one, and it wraps around at both ends.
+// playerMaterial is shared by every part of the game player and the menu player, so one change updates them all
+const changePlayerColor = (step) => {
+    const total = Colors.playerColors.length;
+    colorIndex = (colorIndex + step + total) % total;
+    playerMaterial.color.set(Colors.playerColors[colorIndex]);
+};
+
 //EVENTS
 // every button and key listener of the game, set up once (call it once: calling it twice would double every click)
 const setEvents = () => {
@@ -602,7 +608,9 @@ const setEvents = () => {
         document.querySelector('#performanceModeCheckbox').checked = true;
     }
 
-
+    // the colour arrows on the menu: previous and next colour for the player
+    document.querySelector('#colorPrev').addEventListener('click', () => changePlayerColor(-1));
+    document.querySelector('#colorNext').addEventListener('click', () => changePlayerColor(1));
 
     document.querySelector('#freePlayBtn').addEventListener('click', handleFreeplayClick);
     document.querySelector('#aroundTheWorldBtn').addEventListener('click', handleAroundTheWorldClick);
@@ -809,8 +817,8 @@ function makeAxisGrid(node, label, units) {
 }
 
 
-//RENDER LOOP
 
+//RENDER LOOP
 const render = (time) => {
     time *= 0.001; //time in seconds
     const delta = Math.min(time - lastTime, 0.1);   // seconds since the last frame, capped

@@ -9,6 +9,8 @@ import { createEnvironment } from './environment';
 import { createPlayer, playerMaterial } from './objects/player';
 import { Court } from './constants/court';
 import { createHoop } from './objects/hoop';
+import { createBoombox } from './objects/boombox';
+import { Boombox } from './constants/boombox';
 import { Colors } from './constants/colors';
 import { Player } from './constants/player';
 import { createBasketball } from './objects/basketball';
@@ -22,6 +24,8 @@ import { resizeRendererToDisplaySize } from './helpers/resizeRenderer.js';
 import { uploadScore, fetchScores } from './db.js';
 import { math } from '@tensorflow/tfjs-core';
 import { draw } from '@tensorflow/tfjs-core/dist/ops/browser.js';
+import {makeClickable, setupPointer} from './helpers/pointer.js';
+
 
 //FLAGS
 let mode = 'menu';       // 'menu' | 'freePlay' | 'aroundTheWorld' | 'downtownCountdown'
@@ -47,6 +51,8 @@ let fire; // the basketball's fire shader uniforms, used to update the flame eve
 let controls;
 let joints; // the player's shoulder and elbow pivots, filled in init
 let playerMesh; // the player's y position, used for jumping
+let boomboxScreen; // the boombox's screen mesh, its material gets a shader later
+let boomboxMesh; // the whole boombox, so it can bump to the beat
 
 let colorIndex = 0;
 let stopWatch = 0;   // seconds elapsed in the current run
@@ -106,6 +112,11 @@ const poseHold = {
 };
 let poseUntil = 0; // the current pose is kept until this time
 let jumpDelay = null; // the jump waiting to start (a setTimeout id), or null when none is waiting
+
+
+const toggleBoombox = () => {   
+    track.paused ? track.play() : track.pause();
+}
 
 const handlePose = (arms) => {
     const now = performance.now();
@@ -176,6 +187,14 @@ const lerp = (currentValue, targetValue) => {
     currentValue += (targetValue - currentValue) * 0.2;
     return currentValue;
 }
+
+const updateBoombox = (time) => {
+    const playing = !track.paused && !track.muted;
+    const large = playing && Math.floor(time / Boombox.bumpInterval) % 2 === 1;   // the clock decides: small, large, small, large...
+    const up = large ? Boombox.bumpUp : 0;
+    const side = large ? Boombox.bumpSide : 0;
+    boomboxMesh.scale.set(1 + side, 1 + up, 1 + side);   // the origin is on the floor, so it grows upwards from its feet
+};
 
 const handPoint = (side) => {
     return joints[side].elbow.localToWorld(new THREE.Vector3(0.15, -Player.forearmLength, 0.15));
@@ -760,6 +779,14 @@ const init = async () => {
     scene.add(court);
     makeAxisGrid(court, 'court', 15);
 
+
+    const boomboxParts = createBoombox();
+    boomboxScreen = boomboxParts.screen;
+    boomboxMesh = boomboxParts.boombox;
+    makeClickable(boomboxParts.boombox, toggleBoombox);
+    scene.add(boomboxParts.boombox);
+
+
     if (performanceMode === 'false') {
         const environment = createEnvironment();
         scene.add(environment);
@@ -795,9 +822,12 @@ const init = async () => {
     placeCamera(true); // the goal is the menu pose too, so there is nothing to glide yet
     gui.add(controls, 'enabled').name('orbit camera (debug)'); // checkbox to switch the mouse control off
 
-
+    
+    setupPointer(canvas, camera);
     setEvents(); // hook up every button and key in one place
 }
+
+
 
 const handleDeepshotsOnly = () => {
     let spot;
@@ -963,6 +993,7 @@ const render = (time) => {
 
     updateJump(delta);
     updateBallReturn(delta); // landing, shrinking and growing back of the ball after a shot
+    updateBoombox(time); // the boombox switches between small and large while the music plays
 
 
     const p = ballBody.translation();

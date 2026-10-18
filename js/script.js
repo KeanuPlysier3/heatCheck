@@ -31,6 +31,9 @@ let passedTop = false;
 let jumping = false;
 let performanceMode = localStorage.getItem('performanceMode') ? localStorage.getItem('performanceMode') : 'false'; // if true, the environment is not drawn, to save performance
 let deepshotsOnly = false;
+// true when the game runs under "npm run dev", false in a build. the online scores need a database, which the dev setup does not have
+const isDev = import.meta.env.DEV;
+
 // true while the ball sits in the hand
 const ballIsHeld = () => shotPhase === 'idle' || shotPhase === 'aiming';
 
@@ -45,6 +48,7 @@ let controls;
 let joints; // the player's shoulder and elbow pivots, filled in init
 let playerMesh; // the player's y position, used for jumping
 
+let colorIndex = 0;
 let stopWatch = 0;   // seconds elapsed in the current run
 let timeInterval;    // the id of the stopwatch's setInterval, so endTimer can stop it
 let countdownTimeout; // the id of the 3-2-1 countdown's current setTimeout, so goToMenu can stop it
@@ -429,6 +433,7 @@ const updateStatsDisplay = () => {
 // back to the main menu, from the after game screen or in the middle of a run
 // shows the leaderboard card with the top 10 of a mode: called when a run starts
 const showLeaderboard = (leaderboardMode) => {
+    if (isDev) return;   // no database in dev: the card stays hidden
     document.getElementById('leaderboard').hidden = false;
     loadLeaderboard(leaderboardMode); // not awaited: the run starts at once, the list fills in when the answer arrives
 };
@@ -607,10 +612,7 @@ const drawGreen = (width = Meter.greenWidth) => {
 
 
 //PLAYER COLOUR
-let colorIndex = 0;   // which of Colors.playerColors the player has, 0 is the default
 
-// step is 1 for the next colour and -1 for the previous one, and it wraps around at both ends.
-// playerMaterial is shared by every part of the game player and the menu player, so one change updates them all
 const changePlayerColor = (step) => {
     const total = Colors.playerColors.length;
     colorIndex = (colorIndex + step + total) % total;
@@ -636,8 +638,10 @@ const setEvents = () => {
     });
 
     const uploadBtn = document.querySelector('#uploadScoreBtn');
+    uploadBtn.hidden = isDev;   // nothing to upload to in dev
 
     uploadBtn.addEventListener('click', async () => {
+        if (isDev) return;
         uploadBtn.disabled = true; // no second click while sending (the :disabled css greys it out)
         uploadBtn.textContent = 'Sending…';
         try {
@@ -865,6 +869,7 @@ const formatTime = (seconds) => `${Math.floor(seconds / 60)}:${(seconds % 60).to
 
 
 const loadLeaderboard = async (leaderboardMode) => {
+    if (isDev) return;   // no database in dev: nothing to ask for
     const list = document.getElementById('leaderboard__list');
     const status = document.getElementById('leaderboard__status');
     const isTime = leaderboardMode === 'aroundTheWorld';

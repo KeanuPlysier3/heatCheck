@@ -1846,3 +1846,215 @@ The numbers come from the same `Fence` constants as the drawn fence, so the mesh
 - **`filter: grayscale(1)`** removes the colour from the whole button. A filter is used instead of a grey `background-color`, because some buttons get their colour from an id rule (`#menu #aroundTheWorldBtn`), which would win over a `:disabled` rule. A filter applies on top of whatever colour the button has.
 - **`opacity: .55`** fades it, and the stacked shadow is replaced by one thin dark layer, so the button looks pressed flat instead of liftable.
 - **`pointer-events: none`** means the mouse does not reach the button at all, so the `:hover` and `:active` styles cannot start. Keyboard use is already blocked by `disabled` itself.
+
+## Styling for the game mode descriptions and the shooting explanation (index.html)
+
+**What:** CSS for two new UI elements. The game mode descriptions (`.description`) are the tooltips that follow the mouse over the Around the World and Downtown Countdown buttons. The shooting explanation (`#explanation`) is the screen with three steps and a continue button.
+
+**Why:** both had almost no styling. The descriptions were a bare teal block sitting right under the cursor, and the explanation was plain HTML, so neither matched the sticker look of the rest of the UI.
+
+**How it works:**
+
+- **Description, look:** a small teal sticker with the buttons' halftone dots, a dark border, a pink-and-dark hard shadow, and a slight tilt. `max-width: 17em` wraps the longer text over a few lines instead of one long strip.
+- **Description, position:** `script.js` puts its top left corner on the mouse (`left`/`top` from `clientX`/`clientY`). The `transform: translate(1.2em, 1em)` moves it a little down and to the right, so it never covers the pointer or the text the player is reading. `pointer-events: none` keeps it from catching the mouse.
+- **Description, appearing:** hidden it has `opacity: 0` and is slightly smaller and lower (`scale(.9)`, a bit more `translate`). `.description.visible` sets the full size and opacity, and the `transition` on both makes it pop up. The rule became `.description.visible` instead of just `.visible`, so the class only does something on these tooltips. With reduced motion only the fade is kept.
+- **Explanation screen:** a full-screen frosted layer (`position: fixed; inset: 0`, the same dark tint and blur as the after game screen) with `z-index: 8`, in front of everything else. `#explanation[hidden] { display: none; }` is needed because `display: flex` would otherwise win over the `hidden` attribute.
+- **The three steps:** a wrapping flex row of cream sticker cards with pink shadows, each tilted a little differently (`nth-child`). In each card, the first `<p>` (the step's name) becomes a pink tag, and the last `<p>` (the sentence) uses a plain bold system font so it reads easily.
+- **Pictures:** the image is a framed teal square (`aspect-ratio: 1`). `img[src=""]` is hidden, so the empty placeholders do not show as broken images until real pictures are added.
+- **Continue button:** written for `#explanation > button` with the same yellow sticker look, hover lift and press as the menu buttons. The shared button rules only cover `#menu` and `#afterGame`, so this button would otherwise get none of it.
+
+## Free play description (index.html, script.js)
+
+**What:** a description tooltip for the FreePlay button (`#freePlayDescription`, "Shoot around at your own pace: no timer, no pressure!"), like the ones for the two timed modes.
+
+**Why:** FreePlay was the only mode button without an explanation.
+
+**How it works:** the same pattern as the other two descriptions. The `<div class="description">` sits in `#menu` and gets all its styling from the shared `.description` rules. In `setEvents`, `mouseover` adds the `visible` class (the sticker pops up), `mousemove` puts its corner on the mouse with `clientX`/`clientY`, and `mouseleave` takes the class off again.
+
+## The cat is a sleeping cat (objects/cat.js, constants/cat.js)
+
+**What:** `createCat()` builds a curled-up sleeping cat from primitives instead of a single 20 cm cube: a low body, a head resting on two front paws, two pointy ears, closed eyes, a pink nose and a tail wrapped round the front. All sizes moved into the `Cat` constants. The cat also gets a random fur colour from `catColors` now (before, `randomColorIndex` was worked out but `catColors[0]` was always used), and `cat.js` imports `three/webgpu` instead of `three`, like the other objects.
+
+**Why:** the cube did not read as a cat at all. And every three.js object in the game has to come from `three/webgpu`: mixing it with plain `three` gives two copies of the library, whose materials the WebGPU renderer does not handle the same way.
+
+**How it works:**
+
+- **Same building blocks as the boombox:** an `addBox` helper (a box with its outline shell) and flat `MeshBasicMaterial`s, so the cat matches the player's and the boombox's flat look. The origin is on the floor under the middle of the body, and every part is placed by its middle, so things lying on the floor are lifted by half their height.
+- **The pose:** a cat sleeping curled up is a low loaf, so the body is wide and only 15 cm high. The head sits at the `-x` end, partly on the body, lying on two flat paws that stick out 2 cm in front of the face.
+- **Head group:** the head, ears, eyes and nose are children of one `Object3D` (a pivot, like the shoulder joints). `rotation.x` on that group rolls the whole head onto its side, which is how cats sleep, and every part of the face moves along.
+- **Ears:** `ConeGeometry` with only 4 sides is a small pyramid, which fits the low-poly look. `rotation.y = Math.PI / 4` turns a flat side, not a corner, to the front.
+- **Closed eyes:** two very thin dark boxes on the face, without outlines (they are lines already). They sit 2 mm in front of the face so they do not flicker inside it (z-fighting).
+- **Tail:** one straight piece along the front side of the body on the floor, and a short tip turned with `rotation.y` so it curls in towards the paws.
+- **Clicking:** `makeClickable(cat, toggleCat)` in `script.js` raycasts against the whole group, so clicking any part of the cat still plays its sound.
+
+## The cat stands up when clicked (objects/cat.js, constants/cat.js, script.js)
+
+**What:** the cat has two poses: asleep (curled up, the pose from before) and awake (standing on four legs, head up, eyes open, tail straight up). Clicking it plays its sound and makes it stand. Clicking again, or the sound ending by itself, curls it up again. `createCat()` now returns `{ cat, setAwake }` instead of only the group. In `script.js` the unused `catMesh` became `catParts`.
+
+**Why:** the click only played a sound, and nothing on screen reacted to it.
+
+**How it works:**
+
+- **Two poses, built once:** `createSleeping()` and `createStanding()` each build a complete cat in their own `Object3D`. Both go into the `cat` group, and only one is `visible` at a time. `setAwake(awake)` flips the two `visible` flags. Building both up front means switching costs nothing, and the poses never have to be rebuilt.
+- **Shared head:** `createHead(..., awake)` builds the head with its ears, eyes and nose for both poses. Awake, the eyes are small dark squares (`eye.openHeight`). Asleep, they are the thin closed lines.
+- **The standing pose:** a slimmer body (`Cat.standing`) lifted by the leg height, four legs under its corners placed with one loop over the four (x, z) corners, the head up in front, and the tail as an upright box at the back, leaned back with `rotation.z`.
+- **Same colour in both poses:** the materials (fur, pink, dark) are made once in `createCat()` and passed to both builders, so the random fur colour is the same awake and asleep.
+- **The return value:** like the player's `{ player, joints }`, `createCat()` returns the group to add to the scene plus a function to control it: `{ cat, setAwake }`. The game changes the pose without searching the scene graph.
+- **Kept in step with the sound:** `toggleCat` checks `cat.paused` (the `Audio` object) to choose. If paused, it plays the sound and calls `setAwake(true)`. Otherwise it pauses and calls `setAwake(false)`. An `ended` listener on the audio puts the cat back to sleep when the sound finishes by itself, so the pose always matches whether the sound is playing.
+- **Clicking:** `makeClickable(cat, toggleCat)` gets `catParts.cat`, the whole group. The raycaster only hits visible meshes, so it works in both poses.
+
+## The cat faces the player (objects/cat.js, script.js)
+
+**What:** the cat turns around y so its face looks at the player, in both poses, and keeps following the player from spot to spot. `createCat()` returns a third function, `faceTowards(x, z)`. The render loop calls it every frame with the player's position.
+
+**Why:** it lay at a fixed angle, side-on to the court. A first version made it look at the basket, but it should watch the player.
+
+**How it works:**
+
+- **The angle:** the head is built on the cat's own -x side. Turning an object by an angle around y moves its -x direction to `(-cos(angle), sin(angle))` on the floor, in three.js's rotation convention. The direction from the cat to the point is `(x - cat.x, z - cat.z)`. Setting `-cos(angle)` and `sin(angle)` proportional to those two gives `angle = atan2(toZ, -toX)`. It is the same `atan2` idea as the spots' `facing` angle in `constants/court.js`, only for a model whose front is -x instead of +z.
+- **Every frame:** the player moves to a new spot after makes, jumps, and goes to the deep spot. Calling `faceTowards(playerMesh.position.x, playerMesh.position.z)` in `render` covers every one of those without hooking into each place that moves the player. It is only an `atan2` per frame, so it costs nothing.
+- **Both poses:** the rotation is on the outer `cat` group, so the sleeping and the standing pose both turn with it.
+
+## Shooting explanation text matches the detection (index.html)
+
+**What:** the three steps in `#explanation` are in the order a shot is done (get ready, load, shoot) and numbered, the texts are rewritten, and each picture got an `alt` text.
+
+**Why:** the old texts did not match what `motionDetection.js` checks. "Loading your arms" did not say what to do, "fast" was vague, and the most important rule, releasing while the meter is in the green zone, was missing. The reset step came first, while a shot starts with the arms down.
+
+**How it works:** each text now describes the pose the code detects:
+
+- **Get ready:** the `default` pose. Both arms straight (elbow at least 160°) with the wrist clearly below the elbow. It resets the meter.
+- **Load:** the `loaded` pose. Both elbows bent (under 110°) with the hands below the shoulders. It starts the meter.
+- **Shoot:** the `released` pose. One arm with the elbow opened and the wrist above the head (`some` arm, so one is enough). The text adds the green zone, because the timing decides the shot.
+
+The `alt` texts describe each pose for screen readers and for when a picture does not load. The `src` values stay empty until the pictures exist in `public/images/`: the CSS hides an image with an empty `src`, while a wrong path would show a broken-image icon.
+
+## Help button opens the shooting explanation (index.html, script.js)
+
+**What:** a "Help" button in the game view (`#helpBtn`, top right, just left of the Menu button). Clicking it opens the `#explanation` popup. The popup's continue button (now `#explanationContinue`) or the Escape key closes it.
+
+**Why:** the explanation of the shooting poses existed but could not be opened.
+
+**How it works:**
+
+- **Look:** the help button shares every rule of the Menu button: each `#menuBtn` selector (base, hover, active, focus, disabled) got `#helpBtn` added. A separate `#helpBtn` rule after them only changes what differs: teal instead of yellow, and its position. Both buttons have the same font size, so `right: calc(2.2% + 6.6em)` is the Menu button's spot plus its width and a small gap.
+- **Opening:** the click sets `explanation.hidden = false`. The CSS rule `#explanation[hidden] { display: none; }` does the hiding, so this one flag is enough. Focus moves to the continue button, so Enter or Space closes the popup right away and keyboard users land inside it.
+- **Closing:** continue sets `hidden = true` again, and a `keydown` listener does the same for Escape.
+- **Covered in the menu:** like the Menu button, it sits in the HTML before `#menu`, so the full-screen menu covers it while it is open.
+
+## Explanation pictures linked (index.html)
+
+**What:** the three `<img>` tags in `#explanation` point to the SVG pictures in `public/images/` (`explanation-1-ready.svg`, `explanation-2-load.svg`, `explanation-3-shoot.svg`).
+
+**Why:** the pictures had been added to the project, but the `src` values were still empty, and the CSS hides an image with an empty `src`.
+
+**How it works:** Vite copies everything in `public/` unchanged into the build and serves it from the site's root. So `public/images/x.svg` is reached as `images/x.svg`, without `public/`. The path is relative (no leading `/`), which fits `base: './'` in `vite.config.js`: on GitHub Pages the game lives in a subfolder (`/heatCheck/`), and a path starting with `/` would look in the domain's root instead.
+
+## Equalizer shader on the boombox screen (shaders/visualiser.wgsl, shaders/visualisers.js, objects/boombox.js, script.js)
+
+**What:** the boombox screen shows animated equalizer bars: a second Shadertoy shader (Audio Visualizer Bars, https://www.shadertoy.com/view/WflXDr, original code in `shaders/visualisers.glsl`) ported to WGSL. The bars move while the music plays, and the screen goes black when the boombox is switched off.
+
+**Why:** a second shader is on the plan, and the screen was a plain dark plane waiting for it.
+
+**How it works:** the same setup as the fire shader.
+
+- **The WGSL file** (`visualiser.wgsl`) holds three plain functions in order: `randFloat`, `randColor` and `visualiser`. `visualisers.js` reads the file as text with `?raw`, cuts it at every `fn ` at the start of a line, and turns each piece into a node with `wgslFn`. The second argument lists the functions it calls: `randColor` needs `randFloat`, and `visualiser` needs both.
+- **What the shader does:**
+  - The screen's uv (0 to 1) is moved so the middle is 0 and multiplied by 30, which makes a grid of 30 by 30 cells.
+  - `floor` gives the cell (`id.x` is the column, `id.y` the row), and `fract - 0.5` gives the position inside the cell.
+  - Each column gets its own speed from `randFloat(id.x)`, and its bar height is `sin(time * speed * 2) * 8`. A cell lower than that height gets the column's random colour.
+  - A thin black line on two edges of every cell makes the bars look like LED blocks.
+- **Changes from the GLSL:**
+  - `fragCoord / iResolution` became the plane's own `uv`.
+  - `col` starts at `vec3f(0.0)`, because WGSL has no unset variables.
+  - The chained `r = g = b = 0.8` became three lines, because WGSL has no chained assignment.
+  - `vec3`/`vec4` became `vec3f`/`vec4f`, and every `if` got braces.
+  - A new `on` input multiplies the colour, like the fire's `heat`.
+- **The material** (in `createBoombox`) is a `MeshBasicNodeMaterial` whose `colorNode` is `visualiserFn({ uv: uv(), time, on })`. `time` and `on` are `uniform`s, and `createBoombox` returns them as `visualiser: { time, on }`, the way the basketball returns `fire: { time, heat }`.
+- **Every frame**, `updateBoombox(time)` sets `visualiser.time.value = time` and `visualiser.on.value` to 1 while the track plays and 0 when it does not, using the same `playing` check that drives the boombox's bounce.
+
+## Short part labels in the object files, and no console logging (js/objects, script.js, motionDetection.js)
+
+**What:**
+
+- **Object files:** in every file in `js/objects`, each comment block above a piece of code is now a short label naming the object or part it creates (`// body`, `// tail`, `// rim outline`, `// coping`), the way the boombox already did. Comments at the end of a line, which explain a single number or step, are kept.
+- **Logging:** every `console.log` and `console.error` call is removed from `script.js` and `motionDetection.js`. The camera's `catch` block keeps a one-line comment saying why it may be empty.
+- **Fix:** a stray character after the import in `shaders/visualisers.js` is removed. It would have stopped the whole game with a ReferenceError when the page loaded.
+
+**Why:** the long comments made the object files hard to scan, and the console was full of debug output that a player or grader does not need.
+
+**How it works:** the labels work like headings. Reading only the comments of `createBoombox` or `createSleeping` now gives the list of parts in the order they are built. The detailed explanations of how each part works stay in this dev diary.
+
+The error messages are gone too, but every place that catches an error still handles it: the upload button shows "Failed, retry", the leaderboard shows "Leaderboard unavailable", and without a camera the game is played with the keyboard. Only the console messages disappear.
+
+## The arms move when shooting with the spacebar (script.js)
+
+**What:** the spacebar handlers in `setEvents` set the player's arm pose too. Holding space puts the arms in the `loaded` pose (ball at the chest), letting go raises them into the `release` pose, and after `poseHold.release` milliseconds they go back to `default`.
+
+**Why:** the arms only moved with the webcam. With the keyboard the meter filled and the ball flew, but the character stood still.
+
+**How it works:**
+
+- **The shared target:** `updateArms()` eases the shoulder and elbow pivots towards `targetPose` every frame, whatever set it. Until now only `handlePose` (the webcam) set it. The keyboard handlers now set it to the same three poses from `Player.poses`, so both inputs move the arms the same way.
+- **Only real shots:** after `startMeter()`, the loaded pose is only set when `shotPhase` became `'aiming'`. `startMeter` refuses in the menu, during the 3-2-1, and while the ball is still flying, and then the arms do not move either.
+- **The order on release:** `wasAiming` is read before `releaseMeter()`, because that call changes the phase to `'flying'`. Checking afterwards would always say no shot was released.
+- **Back down:** the webcam's own return to `default` lives inside `handlePose`, which never runs without a camera. A `setTimeout` of `poseHold.release` (the same hold time the webcam uses after a release) puts the arms back down after a keyboard shot.
+
+## The webcam no longer overrides a spacebar shot (script.js)
+
+**What:** a new flag, `keyboardShot`. It is `true` from the moment a spacebar shot starts until the arms are back down after the release, and while it is `true` `handlePose` returns straight away.
+
+**Why:** with the spacebar the arms stayed down and flickered. The webcam runs all the time, and `handlePose` gets every camera frame. While the player held space, the camera saw their real arms hanging down: the `default` pose. So every frame it set `targetPose` back to `default` (the arms never rose, apart from a jolt on the first frame, which was the flicker) and called `resetMeter()`, which could even cancel the keyboard shot.
+
+**How it works:**
+
+- **Space down:** if `startMeter()` really started a shot (`shotPhase === 'aiming'`), the flag goes on and the arms get the loaded pose.
+- **Space up:** the arms get the release pose, and the `setTimeout` that brings them back down also turns the flag off, so from then on the webcam moves the arms again.
+- **Cancelled shot:** if the shot was cancelled while space was held (back to the menu, for example), the key-up finds nothing to release and turns the flag off too. Otherwise it would stay on and the webcam would never move the arms again.
+- **In `handlePose`:** the check is its first line, before any pose is read, so a keyboard shot is never disturbed. The two inputs take turns: the keyboard during its own shot, the webcam the rest of the time.
+
+## Spacebar shots jump too (script.js)
+
+**What:** letting go of space calls `startJump()` together with the release pose, so a keyboard shot is a jump shot like a webcam shot.
+
+**Why:** with the webcam the player jumps as the arms go up, and with the spacebar the player stayed on the ground.
+
+**How it works:** `startJump()` is the same function the webcam uses. It only starts a jump when the player is not already in the air (`if (!jumping)`), gives an upward speed, and `updateJump(delta)` in the render loop moves the player up and back down with gravity, frame-rate independent. It is called after `releaseMeter()`, so the shot is launched from the hand's position at the moment of release. `shoot()` works out the launch speed from wherever the ball is, so the jump does not change the aim.
+
+## script.js reorganised into themed groups (script.js)
+
+**What:** `script.js` is reordered into groups, each under one heading comment in capitals that says what the group is about:
+
+- **GAME STATE**
+- **SCENE**
+- **PHYSICS**
+- **SOUND**
+- **PLAYER MOVEMENT**
+- **SHOT METER**
+- **SHOOTING AND THE BALL**
+- **SPOTS AND CAMERA**
+- **INTERACTIVE OBJECTS**
+- **GAME MODES**
+- **TIMERS**
+- **STATS DISPLAY**
+- **LEADERBOARD**
+- **EVENTS**
+- **SETUP**
+- **RENDER LOOP**
+- **START**
+
+Each group keeps its own variables at the top, followed by the functions that use them.
+
+Smaller changes along the way:
+
+- **Comments:** the ones that only repeated the code (`// set the volume to 70% of the original`, `// enable shadows for this light`) are removed or shortened. The ones that explain a reason (the fixed physics step, why `wasAiming` is read first) stay.
+- **Repeated code:** the three menu descriptions used the same three listeners each, so that code is now one helper, `addDescription(button, description)`. `handleDeepshotsOnly` builds the spot once instead of in both branches of its `if`.
+- **Code that did nothing:**
+  - the unused imports `math` and `draw` from TensorFlow
+  - the unused `boomboxScreen`
+  - `shrinkDuration` in `shotReset`, and `p` and `onFloor` in `onMake`, which were never read
+  - the two lines in `init` that set the green zone again right after `drawGreen` had already done it
+
+**Why:** related code was spread over the whole file (the camera functions sat below `init`, the leaderboard below the helpers), which made the file hard to find your way around.
+
+**How it works:** the behaviour is the same, because only the order of declarations changed. That is safe because every `const` function is only *called* once the whole file has run. The code that runs straight away is the `START` group at the bottom, so by then every function and variable above it exists. The few top-level statements higher up (creating the audio objects, the debug GUI, `cameraGoal` and the cat's `ended` listener) do not call any function defined below them.

@@ -9,10 +9,10 @@ export const createThreePointLine = () => {
     const material = new THREE.MeshPhongMaterial({ color: Colors.courtLines });
     const lineHeight = 0.015; // a hair above the slab, so the line doesn't flicker with the floor
 
-    // the angle at which the arc meets the straight corner pieces
+    // corner angle
     const cornerAngle = Math.acos(cornerX / radius);
 
-    //a ring as wide as the line, cut down to the part between the two corners
+    // arc
     const arcGeometry = new THREE.RingGeometry(
         radius - Court.threePoint.lineWidth / 2,   // inner radius
         radius + Court.threePoint.lineWidth / 2,   // outer radius
@@ -27,7 +27,7 @@ export const createThreePointLine = () => {
     arcMesh.receiveShadow = true;
     line.add(arcMesh);
 
-    // the two corner pieces: from the baseline to where the arc begins
+    // corner pieces
     const baselineZ = Court.depth / 2;
     const arcEndZ = Court.Hoop.rimZ - radius * Math.sin(cornerAngle);//how far in front of the rim the arc ends
     const cornerLength = baselineZ - arcEndZ; //how long the corner pieces are.

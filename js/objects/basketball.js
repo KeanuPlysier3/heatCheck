@@ -10,7 +10,7 @@ import { fireFn } from '../shaders/fire.js';
 export const createBasketball = () => {
     const basketball = new THREE.Object3D();
 
-    // empty container, so the whole court can be moved or hidden as one thing
+    // ball
     const ballGeometry = new THREE.SphereGeometry(Basketball.radius, 32, 16);
     const ballMaterial = new THREE.MeshBasicMaterial({ color: Colors.basketball });
     const sphere = new THREE.Mesh(ballGeometry, ballMaterial);
@@ -25,7 +25,7 @@ export const createBasketball = () => {
     const fireHeat = uniform(0);   // 0 = no fire, 1 = full fire. start at 1 so you can see it
 
     const fireHeight = Basketball.radius * 7;
-    // the flame is a cylinder, this is its height. The basketball is a sphere, so the flame's base is at the basketball's centre and its tip is above the basketball's top
+    // flame
     const cilinderGeometry = new THREE.CylinderGeometry(Basketball.radius, Basketball.radius, fireHeight, 32, 1, true);
     const cilinderMaterial = new THREE.MeshBasicNodeMaterial();
     cilinderMaterial.colorNode = fireFn({ uv: uv(), time: fireTime, heat: fireHeat });
@@ -38,7 +38,7 @@ export const createBasketball = () => {
     cilinder.position.y = fireHeight/2;
     basketball.add(cilinder);
 
-    //two inner flames
+    // inner flames
     const innerFlames = [
         { radius: Basketball.radius * 0.66, height: fireHeight + Basketball.radius * 2, turn: Math.PI * 0.6 },
         { radius: Basketball.radius * 0.33, height: fireHeight + Basketball.radius * 4, turn: Math.PI * 1.3 },

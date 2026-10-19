@@ -27,12 +27,12 @@ const createDiamondCanvas = () => {
 
 const diamondCanvas = createDiamondCanvas();
 
-// the wire mesh shows the pattern from both sides and skips the transparent pixels completely
+// wire mesh
 const createMeshMaterial = (length, height) => {
     const texture = new THREE.CanvasTexture(diamondCanvas);
     texture.colorSpace = THREE.SRGBColorSpace;
 
-    //texture coordinates
+    // texture
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
     texture.repeat.set(length / Fence.diamondSize, height / Fence.diamondSize); // one diamond every diamondSize metres
@@ -46,7 +46,7 @@ const createMeshMaterial = (length, height) => {
 
 const metalMaterial = new THREE.MeshPhongMaterial({ color: Colors.fencePost, emissive: Colors.fencePost, emissiveIntensity: SelfLight });
 
-// a cylinder standing on the ground at (x, z), with its outline
+// post
 const createPost = (x, z, height) => {
     const postGeometry = new THREE.CylinderGeometry(Fence.postRadius, Fence.postRadius, height, 8);
     const postMesh = new THREE.Mesh(postGeometry, metalMaterial);
@@ -63,7 +63,7 @@ const createSide = (a, b, height) => {
     const dz = b.z - a.z;
     const length = Math.hypot(dx, dz);
 
-    // the angle to turn something that lies along x so it lies along this side instead
+    // side angle
     const angle = Math.atan2(-dz, dx);
     const middle = { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 };
 
@@ -73,14 +73,14 @@ const createSide = (a, b, height) => {
     meshMesh.rotation.y = angle;
     side.add(meshMesh);
 
-    //posts 
+    // posts
     const gaps = Math.ceil(length / Fence.postSpacing);
     for (let i = 0; i <= gaps; i++) {
         const t = i / gaps; 
         side.add(createPost(a.x + dx * t, a.z + dz * t, height));
     }
 
-    // top post
+    // top rail
     const railMesh = new THREE.Mesh(new THREE.CylinderGeometry(Fence.railRadius, Fence.railRadius, length, 8), metalMaterial);
     railMesh.position.set(middle.x, Fence.groundY + height, middle.z);
     railMesh.rotation.set(0, angle, Math.PI / 2);
@@ -94,17 +94,17 @@ export const createFence = () => {
     const fence = new THREE.Object3D();
     const { minX, maxX, minZ, maxZ } = Fence;
 
-    // the four corners, seen from above
+    // corners
     const backLeft = { x: maxX, z: maxZ };
     const backRight = { x: minX, z: maxZ };
     const frontLeft = { x: maxX, z: minZ };
     const frontRight = { x: minX, z: minZ };
 
     fence.add(createSide(backRight, backLeft, Fence.backHeight)); // behind the hoop, the tall side
-    // no side at the camera end: the stands close the court off there (see objects/stands.js)
+    // sides
     fence.add(createSide(frontRight, backRight, Fence.height)); // the -x side, towards the brownstones
 
-    // the +x side, towards the street, in two parts with the gate between them
+    // street side with gate
     fence.add(createSide(frontLeft, { x: maxX, z: Fence.gateFromZ }, Fence.height));
     fence.add(createSide({ x: maxX, z: Fence.gateToZ }, backLeft, Fence.height));
 

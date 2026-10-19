@@ -36,7 +36,6 @@ export const motionDetection = async (poseCallback) => {
     //the backend
     const success = await tf.setBackend('webgpu');
     await tf.ready();
-    console.log('webgpu started:', success, '| backend in use:', tf.getBackend());
 
 
     //the webcam, playing
@@ -62,7 +61,6 @@ export const motionDetection = async (poseCallback) => {
         { modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING }//fast model, but less accurate than the heavy model
     );
 
-    console.log("Detector initialized:", detector);
 
     detect();
 
@@ -77,7 +75,7 @@ async function getMedia(constraints) {
         video.srcObject = stream;
         await video.play();
     } catch (err) {
-        console.error("Error accessing media devices.", err);
+        // no camera, or access refused: the game is still played with the keyboard
     }
 }
 
@@ -200,7 +198,6 @@ const updateShot = (side, arm, now) => {
 
 const shotReleased = (time, side) => {
     shotState.count++;
-    console.log(`SHOT #${shotState.count} with the ${side} arm at ${(time / 1000).toFixed(2)} s`);
     
     const banner = document.querySelector('#shotBanner');
 

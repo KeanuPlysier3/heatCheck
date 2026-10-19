@@ -780,7 +780,8 @@
         /* disabled: a faded, grey sticker pressed flat onto the page. no shadow to lift off, no hover, no press */
         #menu button:disabled,
         #afterGame button:disabled,
-        #menuBtn:disabled {
+        #menuBtn:disabled,
+        #helpBtn:disabled {
             filter: grayscale(1);
             /* a filter, not a new background colour: it greys every button, whatever colour its own rule gives it */
             opacity: .55;
@@ -800,7 +801,8 @@
 
         /* the in-game menu button: a small yellow sticker in the top right corner, the timer and the deep shot
            checkbox sit under it */
-        #menuBtn {
+        #menuBtn,
+        #helpBtn {
             position: absolute;
             top: 2%;
             right: 2.2%;
@@ -821,19 +823,34 @@
             transition: transform .1s, box-shadow .1s;
         }
 
-        #menuBtn:hover {
+        #menuBtn:hover,
+
+        #helpBtn:hover {
             transform: skewX(-8deg) translate(-.06em, -.06em);
             box-shadow: .16em .16em 0 #FF3D8B, .3em .3em 0 #1B1030;
         }
 
-        #menuBtn:active {
+        #menuBtn:active,
+
+        #helpBtn:active {
             transform: skewX(-8deg) translate(.2em, .2em);
             box-shadow: 0 0 0 #FF3D8B, 0 0 0 #1B1030;
         }
 
-        #menuBtn:focus-visible {
+        #menuBtn:focus-visible,
+
+        #helpBtn:focus-visible {
             outline: .14em solid #FFF1D0;
             outline-offset: .16em;
+        }
+
+        /* the help button: the same sticker as the menu button, in teal, just left of it.
+           both buttons use the same font size, so 6.6em is the menu button's width plus a small gap */
+        #helpBtn {
+            right: calc(2.2% + 6.6em);
+            background-color: #16C7B0;
+            color: #FFF1D0;
+            text-shadow: .06em .06em 0 #1B1030;
         }
 
         /* sticker checkboxes (performance mode, deep shot only): a cream box that gets a fat lime tick */
@@ -1126,6 +1143,184 @@
             color: #FFF1D0;
         }
 
+        /* the game mode descriptions: a small teal sticker that follows the mouse over its button.
+           script.js puts its top left corner on the mouse, the transform moves it off the pointer */
+        .description {
+            z-index: 5;
+            position: fixed;
+            pointer-events: none;
+            /* never under the mouse itself, so it cannot block the button */
+            max-width: 17em;
+            margin: 0;
+            padding: .5em .8em .55em;
+            font-family: "Bowlby One", Impact, "Arial Black", sans-serif;
+            font-size: clamp(.75rem, 1.1vw, 1rem);
+            line-height: 1.25;
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            color: #FFF1D0;
+            text-shadow: .08em .08em 0 #1B1030;
+            background-color: #16C7B0;
+            /* court teal */
+            background-image: radial-gradient(rgba(27, 16, 48, .16) 22%, transparent 24%);
+            background-size: .35em .35em;
+            /* the halftone dots of the buttons */
+            border: .16em solid #1B1030;
+            box-shadow: .12em .12em 0 #FF3D8B, .24em .24em 0 #1B1030;
+            /* hidden: invisible, a little smaller and lower, so it pops up when it appears */
+            opacity: 0;
+            transform: translate(1.2em, 1.4em) rotate(-2deg) scale(.9);
+            transform-origin: top left;
+            transition: opacity .15s, transform .15s;
+        }
+
+        .description.visible {
+            opacity: 1;
+            transform: translate(1.2em, 1em) rotate(-2deg) scale(1);
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .description {
+                transition: opacity .15s;
+            }
+        }
+
+        /* the shooting explanation: a frosted layer over the game with one sticker card, like the after game screen */
+        #explanation {
+            position: fixed;
+            inset: 0;
+            z-index: 8;
+            /* in front of the after game screen (6) and the leaderboard (7) */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1.6em;
+            padding: 1em;
+            font-family: "Bowlby One", Impact, "Arial Black", sans-serif;
+            color: #1B1030;
+            background: rgba(27, 16, 48, .55);
+            backdrop-filter: blur(.75vw);
+            -webkit-backdrop-filter: blur(.75vw);
+        }
+
+        #explanation[hidden] {
+            display: none;
+            /* display: flex above would beat the hidden attribute */
+        }
+
+        /* the three steps side by side, each one a card */
+        .explanation__section {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 1.6em;
+        }
+
+        .explanation__section > div {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: .5em;
+            width: clamp(12em, 19vw, 17em);
+            padding: 1em 1.1em 1.2em;
+            text-align: center;
+            background-color: #FFF1D0;
+            background-image: radial-gradient(rgba(27, 16, 48, .1) 22%, transparent 24%);
+            background-size: .5em .5em;
+            border: .22em solid #1B1030;
+            box-shadow: .18em .18em 0 #FF3D8B, .36em .36em 0 #FF3D8B, .54em .54em 0 #1B1030;
+        }
+
+        /* a slightly different tilt per card, like stickers put on by hand */
+        .explanation__section > div:nth-child(1) {
+            transform: rotate(-2deg);
+        }
+
+        .explanation__section > div:nth-child(2) {
+            transform: rotate(1deg) translateY(.4em);
+        }
+
+        .explanation__section > div:nth-child(3) {
+            transform: rotate(-1deg);
+        }
+
+        /* the picture of the pose: a framed square */
+        .explanation__section img {
+            width: 100%;
+            aspect-ratio: 1;
+            object-fit: contain;
+            background: #16C7B0;
+            border: .16em solid #1B1030;
+        }
+
+        /* no picture yet (empty src): leave it out instead of showing a broken image */
+        .explanation__section img[src=""] {
+            display: none;
+        }
+
+        /* the step's name, as a pink tag */
+        .explanation__section p:first-of-type {
+            margin: 0;
+            padding: .1em .6em;
+            font-size: clamp(.9rem, 1.3vw, 1.2rem);
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            color: #FFF1D0;
+            background: #FF3D8B;
+            border: .14em solid #1B1030;
+            transform: rotate(-3deg);
+        }
+
+        /* the explanation itself, in a plain font so the sentence reads easily */
+        .explanation__section p:last-of-type {
+            margin: 0;
+            font-family: system-ui, sans-serif;
+            font-weight: 700;
+            font-size: clamp(.85rem, 1.1vw, 1rem);
+            line-height: 1.35;
+        }
+
+        /* continue: the yellow sticker button of the menu */
+        #explanation > button {
+            padding: .45em 1.4em;
+            font-family: "Bowlby One", Impact, "Arial Black", sans-serif;
+            font-size: clamp(1.2rem, 2vw, 1.8rem);
+            letter-spacing: .02em;
+            text-transform: uppercase;
+            color: #1B1030;
+            background-color: #FFD400;
+            background-image: radial-gradient(rgba(27, 16, 48, .22) 22%, transparent 24%);
+            background-size: .3em .3em;
+            border: .16em solid #1B1030;
+            border-radius: 0;
+            cursor: pointer;
+            box-shadow: .11em .11em 0 #16C7B0, .22em .22em 0 #16C7B0, .33em .33em 0 #1B1030, .44em .44em 0 #1B1030;
+            transform: skewX(-8deg) rotate(-1deg);
+            transition: transform .1s, box-shadow .1s;
+        }
+
+        #explanation > button:hover {
+            transform: skewX(-8deg) translate(-.11em, -.11em);
+            box-shadow: .16em .16em 0 #16C7B0, .32em .32em 0 #16C7B0, .48em .48em 0 #1B1030, .65em .65em 0 #1B1030;
+        }
+
+        #explanation > button:active {
+            transform: skewX(-8deg) translate(.32em, .32em);
+            box-shadow: 0 0 0 #16C7B0, 0 0 0 #1B1030;
+        }
+
+        #explanation > button:focus-visible {
+            outline: .14em solid #FFF1D0;
+            outline-offset: .16em;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            #explanation > button {
+                transition: none;
+            }
+        }
+
         @keyframes loading-bounce {
 
 
@@ -1228,14 +1423,43 @@
         <p id="leaderboard__status" hidden></p>
     </section>
 
-        <form method="POST" action id="afterGame__form" hidden >
-            <label for="name">Name</label>
-            <input type="hidden" id="name" name="name">
-            <input type="hidden" id="score" name="score">
-            <input type="hidden" id="mode" name="mode">
-        </form>
+    <section id="explanation" hidden>
+        <h3 hidden>shooting explanation</h3>
 
-       
+        <!-- the three steps of a shot, in the order they are done. the pictures are in public/images/,
+             which Vite serves from the root, so the path starts at images/ -->
+        <div class="explanation__section">
+            <div>
+                <img src="images/explanation-1-ready.svg" alt="Both arms hanging straight down by the sides">
+                <p>1. get ready</p>
+                <p>Let both arms hang straight down by your sides. This resets the shot meter.</p>
+            </div>
+
+            <div>
+                <img src="images/explanation-2-load.svg" alt="Both elbows bent, hands in front of the chest holding the ball">
+                <p>2. load</p>
+                <p>Bend your elbows and hold both hands in front of your chest, like you're holding the ball. The meter starts filling.</p>
+            </div>
+
+            <div>
+                <img src="images/explanation-3-shoot.svg" alt="One arm stretched straight up above the head, releasing the ball">
+                <p>3. shoot</p>
+                <p>Push one arm straight up above your head. Release while the meter is in the green zone for a perfect shot!</p>
+            </div>
+        </div>
+
+
+        <button id="explanationContinue">continue</button>
+    </section>
+
+    <form method="POST" action id="afterGame__form" hidden>
+        <label for="name">Name</label>
+        <input type="hidden" id="name" name="name">
+        <input type="hidden" id="score" name="score">
+        <input type="hidden" id="mode" name="mode">
+    </form>
+
+
 
     <div id="stats">
         <p>Points: <span id="points">0</span></p>
@@ -1250,12 +1474,14 @@
     </div>
     <canvas id="c"></canvas>
 
-    <label id="deepShotsOnly" class="stickerCheckbox" hidden >
+    <label id="deepShotsOnly" class="stickerCheckbox" hidden>
         <input type="checkbox" id="deepShotOnlyCheckbox">
         <span>deep shot only</span>
     </label>
 
     <button id="menuBtn">Menu</button>
+    <!-- in game: opens the shooting explanation -->
+    <button id="helpBtn">Help</button>
 
     <label id="freeCam" class="stickerCheckbox">
         <input type="checkbox" id="freeCamCheckbox">
@@ -1268,13 +1494,20 @@
             </h1>
             <button id="freePlayBtn">FreePlay</button>
             <button id="aroundTheWorldBtn">Around the World</button>
+
             <button id="downTownCountdownBtn">downtown countdown</button>
+
             <label id="performanceMode" class="stickerCheckbox">
                 <input type="checkbox" id="performanceModeCheckbox">
                 <span>performance mode</span>
             </label>
         </div>
-  
+
+        <div class="description" id="freePlayDescription">Shoot around at your own pace: no timer, no pressure!</div>
+        <div class="description" id="aroundTheWorldDescription">Hit 3 shots across the 5 different spots on the
+            court as fast as possible!</div>
+        <div class="description" id="downTownCountdownDescription">Hit as many shots as possible in 60s!</div>
+
         <label id="menu__name">
             <span class="menu__nameTag">player</span>
             <input type="text" id="usernameInput" placeholder="your name" maxlength="16" pattern="[A-Za-z0-9]{1,16}"

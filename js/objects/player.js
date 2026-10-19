@@ -19,7 +19,7 @@ export const createPlayer = () => {
     headMesh.castShadow = true;
     player.add(headMesh);
 
-    // head outline: the same sphere, Outline.thickness bigger all round
+    // head outline
     const headOutlineGeometry = new THREE.SphereGeometry(Player.headRadius + Outline.thickness, 32, 32);
     const headOutlineMesh = createOutlineMesh(headOutlineGeometry);
     headMesh.add(headOutlineMesh);
@@ -31,7 +31,7 @@ export const createPlayer = () => {
     torsoMesh.castShadow = true;
     player.add(torsoMesh);
 
-    // torso outline: the same box, Outline.thickness bigger on every side
+    // torso outline
     const torsoOutlineGeometry = new THREE.BoxGeometry(Player.torsoWidth + Outline.thickness * 2, Player.torsoHeight + Outline.thickness * 2, Player.torsoDepth + Outline.thickness * 2);
     const torsoOutlineMesh = createOutlineMesh(torsoOutlineGeometry);
     torsoMesh.add(torsoOutlineMesh);
@@ -45,7 +45,7 @@ export const createPlayer = () => {
         legMesh.castShadow = true;
         player.add(legMesh);
 
-        // leg outline: the same box, Outline.thickness bigger on every side
+        // leg outline
         const legOutlineGeometry = new THREE.BoxGeometry(legWidth + Outline.thickness * 2, Player.legLength + Outline.thickness * 2, legWidth + Outline.thickness * 2);
         const legOutlineMesh = createOutlineMesh(legOutlineGeometry);
         legMesh.add(legOutlineMesh);
@@ -57,13 +57,13 @@ export const createPlayer = () => {
         footMesh.castShadow = true;
         player.add(footMesh);
 
-        // foot outline: the same box, Outline.thickness bigger on every side
+        // foot outline
         const footOutlineGeometry = new THREE.BoxGeometry(Player.footWidth + Outline.thickness * 2, Player.footHeight + Outline.thickness * 2, Player.footLength + Outline.thickness * 2);
         const footOutlineMesh = createOutlineMesh(footOutlineGeometry);
         footMesh.add(footOutlineMesh);
     });
 
-//shoulder contains the upper arm, and elbow. Elbow contains lower arm.
+// arms
     const armWidth = Player.armRadius * 2; 
     [Player.shoulderX, -Player.shoulderX].forEach((x) => {
         const shoulder = new THREE.Object3D();
@@ -76,7 +76,7 @@ export const createPlayer = () => {
         upperArmMesh.castShadow = true;
         shoulder.add(upperArmMesh);
 
-        // upper arm outline: the same box, Outline.thickness bigger on every side
+        // upper arm outline
         const upperArmOutlineGeometry = new THREE.BoxGeometry(armWidth + Outline.thickness * 2, Player.upperArmLength + Outline.thickness * 2, armWidth + Outline.thickness * 2);
         const upperArmOutlineMesh = createOutlineMesh(upperArmOutlineGeometry);
         upperArmMesh.add(upperArmOutlineMesh);
@@ -91,12 +91,12 @@ export const createPlayer = () => {
         lowerArmMesh.castShadow = true;
         elbow.add(lowerArmMesh);
 
-        // lower arm outline: the same box, Outline.thickness bigger on every side
+        // lower arm outline
         const lowerArmOutlineGeometry = new THREE.BoxGeometry(armWidth + Outline.thickness * 2, Player.forearmLength + Outline.thickness * 2, armWidth + Outline.thickness * 2);
         const lowerArmOutlineMesh = createOutlineMesh(lowerArmOutlineGeometry);
         lowerArmMesh.add(lowerArmOutlineMesh);
 
-        // the player faces +z (the hoop), and seen from there its left arm is the one on the +x side
+        // arm side
         const side = x > 0 ? 'left' : 'right';
         joints[side].shoulder = shoulder;
         joints[side].elbow = elbow;

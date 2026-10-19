@@ -5,10 +5,10 @@ import { Colors, SelfLight } from '../constants/colors';
 import { Outline } from '../constants/outline';
 import { createOutlineMesh } from '../helpers/outline';
 
-// a random number between min and max
+// random number
 const randomBetween = (min, max) => min + Math.random() * (max - min);
 
-// the materials are shared by every tree, there is no need for a new one per cube
+// materials
 const trunkMaterial = new THREE.MeshPhongMaterial({ color: Colors.treeTrunk, emissive: Colors.treeTrunk, emissiveIntensity: SelfLight });
 const leafMaterials = [Colors.treeLeaves, Colors.treeLeavesDark].map((color) =>
     new THREE.MeshPhongMaterial({ color, emissive: color, emissiveIntensity: SelfLight, flatShading: true })
@@ -24,11 +24,11 @@ export const createTree = () => {
     trunkMesh.position.y = Tree.trunkHeight / 2; // a box is centred on its middle, lift it by half its height
     tree.add(trunkMesh);
 
-    // trunk outline: the same box, Outline.thickness bigger on every side
+    // trunk outline
     const trunkOutlineGeometry = new THREE.BoxGeometry(Tree.trunkWidth + Outline.thickness * 2, Tree.trunkHeight + Outline.thickness * 2, Tree.trunkWidth + Outline.thickness * 2);
     trunkMesh.add(createOutlineMesh(trunkOutlineGeometry));
 
-    // crown: a few big cubes clustered around the top of the trunk, each a random size, place and angle
+    // crown
     const leafCount = Math.round(randomBetween(Tree.leafCountMin, Tree.leafCountMax));
     for (let i = 0; i < leafCount; i++) {
         const size = randomBetween(Tree.leafSizeMin, Tree.leafSizeMax);
@@ -49,7 +49,7 @@ export const createTree = () => {
         leafMesh.castShadow = true;
         tree.add(leafMesh);
 
-        // leaf outline: the same cube, Outline.thickness bigger on every side. as a child it turns with the cube
+        // leaf outline
         const leafOutlineGeometry = new THREE.BoxGeometry(size + Outline.thickness * 2, size + Outline.thickness * 2, size + Outline.thickness * 2);
         leafMesh.add(createOutlineMesh(leafOutlineGeometry));
     }
@@ -57,7 +57,7 @@ export const createTree = () => {
     return tree;
 };
 
-// a row of trees along every sidewalk strip, at random places
+// trees
 export const createTrees = () => {
     const trees = new THREE.Object3D();
 
@@ -65,8 +65,7 @@ export const createTrees = () => {
     const slotCount = Math.floor(Street.length / Tree.slotLength);
 
     Sidewalk.strips.forEach((strip) => {
-        // the sidewalk is cut into equal slots along its length. each slot gets at most one tree,
-        // placed near its middle, so trees never end up on top of each other
+        // tree slots
         for (let slot = 0; slot < slotCount; slot++) {
             if (Math.random() > Tree.chance) continue; // leave this slot empty
 

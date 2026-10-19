@@ -7,10 +7,10 @@ import { createThreePointLine } from './threePointLine';
 import { createKey } from './key';
 
 export const createCourt = () => {
-    // empty container, so the whole court can be moved or hidden as one thing
+    // court
     const court = new THREE.Object3D();
 
-    // the area around the court, one slab-thickness below the playing surface
+    // surround
     const surroundGeometry = new THREE.PlaneGeometry(Court.surroundWidth, Court.surroundDepth);
     const surroundMaterial = new THREE.MeshPhongMaterial({ color: Colors.surround, emissive: Colors.surround, emissiveIntensity: SelfLight });
     const surroundMesh = new THREE.Mesh(surroundGeometry, surroundMaterial);
@@ -32,7 +32,7 @@ export const createCourt = () => {
         emissiveIntensity: SelfLight,
     });
 
-    // the playing surface: a slab, a box is already flat so it needs no rotation
+    // floor
     const floorGeometry = new THREE.BoxGeometry(Court.width, Court.thickness, Court.depth);
 
     const floorMesh = new THREE.Mesh(floorGeometry, floorMaterial);
@@ -40,7 +40,7 @@ export const createCourt = () => {
     floorMesh.receiveShadow = true;
     court.add(floorMesh);
 
-    // floor outline: the same box, Outline.thickness bigger on every side
+    // floor outline
     const floorOutlineGeometry = new THREE.BoxGeometry(Court.width + Outline.thickness * 2, Court.thickness + Outline.thickness * 2, Court.depth + Outline.thickness * 2);
     const floorOutlineMesh = createOutlineMesh(floorOutlineGeometry);
     floorMesh.add(floorOutlineMesh);

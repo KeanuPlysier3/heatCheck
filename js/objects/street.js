@@ -2,11 +2,11 @@ import * as THREE from 'three/webgpu';
 import { Street } from '../constants/street';
 import { Colors, SelfLight } from '../constants/colors';
 
-// the asphalt, a dashed line down the middle and a zebra crossing near the camera end
+// street
 export const createStreet = () => {
     const street = new THREE.Object3D();
 
-    // asphalt: a flat plane a hair above the surround, two surfaces at the same height would flicker
+    // asphalt
     const asphaltGeometry = new THREE.PlaneGeometry(Street.width, Street.length);
     const asphaltMaterial = new THREE.MeshPhongMaterial({ color: Colors.street, emissive: Colors.street, emissiveIntensity: SelfLight });
     const asphaltMesh = new THREE.Mesh(asphaltGeometry, asphaltMaterial);
@@ -15,11 +15,11 @@ export const createStreet = () => {
     asphaltMesh.receiveShadow = true;
     street.add(asphaltMesh);
 
-    // the markings lie a little higher again, on top of the asphalt
+    // markings
     const markingY = Street.groundY + 0.02;
     const markingMaterial = new THREE.MeshPhongMaterial({ color: Colors.streetLine, emissive: Colors.streetLine, emissiveIntensity: SelfLight });
 
-    // dashed centre line: one dash every dashLength + dashGap, from one end of the street to the other
+    // centre line
     const dashGeometry = new THREE.PlaneGeometry(Street.dashWidth, Street.dashLength);
     const dashStep = Street.dashLength + Street.dashGap;
     for (let z = -Street.length / 2 + Street.dashLength / 2; z < Street.length / 2; z += dashStep) {
@@ -29,11 +29,11 @@ export const createStreet = () => {
         street.add(dashMesh);
     }
 
-    // zebra crossing: stripes that run along the street, side by side across its width
+    // zebra crossing
     const stripeGeometry = new THREE.PlaneGeometry(Street.crosswalkStripeWidth, Street.crosswalkDepth);
     const crosswalkMaterial = new THREE.MeshPhongMaterial({ color: Colors.crosswalk, emissive: Colors.crosswalk, emissiveIntensity: SelfLight });
     const stripeStep = Street.crosswalkStripeWidth + Street.crosswalkStripeGap;
-    // as many stripes as fit with at least one gap left over, then centred, so both kerbs keep the same margin
+    // stripes
     const stripeCount = Math.floor((Street.width - Street.crosswalkStripeGap) / stripeStep);
     const stripesWidth = stripeCount * Street.crosswalkStripeWidth + (stripeCount - 1) * Street.crosswalkStripeGap;
     const firstStripeX = Street.centreX - stripesWidth / 2 + Street.crosswalkStripeWidth / 2;

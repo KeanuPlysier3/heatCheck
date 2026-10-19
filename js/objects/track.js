@@ -4,20 +4,19 @@ import { Colors, SelfLight } from '../constants/colors';
 import { Outline } from '../constants/outline';
 import { createOutlineMesh } from '../helpers/outline';
 
-// a colour from the palette as a css colour, which is what a canvas wants
+// css colour
 const css = (color) => '#' + color.toString(16).padStart(6, '0');
 
 const litMaterial = (color) => new THREE.MeshPhongMaterial({ color, emissive: color, emissiveIntensity: SelfLight });
 
-// a box with its outline as a child
+// outlined box
 const outlinedBox = (width, height, depth, material) => {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
     mesh.add(createOutlineMesh(new THREE.BoxGeometry(width + Outline.thickness * 2, height + Outline.thickness * 2, depth + Outline.thickness * 2)));
     return mesh;
 };
 
-// the top of the deck: one sleeper drawn on a small canvas, repeated along the whole track, like the fence's diamond.
-// the canvas covers one sleeperSpacing along the track and the deck's full width across it
+// sleeper texture
 const createSleeperTexture = () => {
     const ppm = Track.pixelsPerMetre;
     const canvas = document.createElement('canvas');
@@ -28,7 +27,7 @@ const createSleeperTexture = () => {
     ctx.fillStyle = css(Colors.trackDeck);
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // one sleeper: a wooden bar across the track, as wide as the rails plus a bit on each side
+    // sleeper
     const sleeperLength = (Track.railGauge + 0.6) * ppm;
     ctx.fillStyle = css(Colors.trackSleeper);
     ctx.fillRect(canvas.width * 0.3, (canvas.height - sleeperLength) / 2, canvas.width * 0.4, sleeperLength);
@@ -44,15 +43,14 @@ export const createTrack = () => {
     const track = new THREE.Object3D();
     const steel = litMaterial(Colors.trackSteel);
 
-    // deck: a long box. the top gets the painted sleepers, the other sides are steel.
-    // a box takes six materials in the order +x, -x, +y (top), -y, +z, -z
+    // deck
     const sleeperTexture = createSleeperTexture();
     const topMaterial = new THREE.MeshPhongMaterial({ map: sleeperTexture, emissive: 0xffffff, emissiveMap: sleeperTexture, emissiveIntensity: SelfLight });
     const deck = outlinedBox(Track.length, Track.deckThickness, Track.deckWidth, [steel, steel, topMaterial, steel, steel, steel]);
     deck.position.set(0, Track.groundY + Track.deckY - Track.deckThickness / 2, Track.centreZ); // its top at deckY
     track.add(deck);
 
-    // columns: one under each edge of the deck, every columnSpacing along the track
+    // columns
     const columnHeight = Track.deckY - Track.deckThickness; // from the ground to the underside of the deck
     const edgeZ = Track.deckWidth / 2 - Track.columnSize; // a little in from the deck's edges
     for (let x = -Track.length / 2 + Track.columnSpacing / 2; x < Track.length / 2; x += Track.columnSpacing) {
@@ -63,7 +61,7 @@ export const createTrack = () => {
         });
     }
 
-    // rails: two thin bars along the whole deck, railGauge apart, lying on its top
+    // rails
     const railMaterial = litMaterial(Colors.trackRail);
     [-Track.railGauge / 2, Track.railGauge / 2].forEach((offsetZ) => {
         const rail = outlinedBox(Track.length, Track.railHeight, Track.railWidth, railMaterial);

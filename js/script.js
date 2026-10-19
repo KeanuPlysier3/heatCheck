@@ -44,7 +44,7 @@ const isDev = import.meta.env.DEV;
 const ballIsHeld = () => shotPhase === 'idle' || shotPhase === 'aiming';
 
 
-let catMesh;
+let catParts; // the cat and its setAwake(awake), filled in init
 let canvas;
 let renderer;
 let scene;
@@ -124,9 +124,17 @@ const toggleBoombox = () => {
     track.paused ? track.play() : track.pause();
 }
 
+// click on the cat: it wakes up and stands while its sound plays, and curls up again when it stops
 const toggleCat = () => {
-    cat.paused ? cat.play() : cat.pause();
+    if (cat.paused) {
+        cat.play();
+        catParts.setAwake(true);
+    } else {
+        cat.pause();
+        catParts.setAwake(false);
+    }
 }
+cat.addEventListener('ended', () => catParts.setAwake(false)); // the sound finished by itself: back to sleep
 
 const handlePose = (arms) => {
     const now = performance.now();
@@ -689,7 +697,22 @@ const setEvents = () => {
         }
     });
 
-    document.querySelector('#freePlayBtn').addEventListener('click', handleFreeplayClick);
+    const freePlayBtn = document.querySelector('#freePlayBtn');
+    const freePlayDescription = document.querySelector('#freePlayDescription');
+
+    freePlayBtn.addEventListener('click', handleFreeplayClick);
+    freePlayBtn.addEventListener('mouseover', () => {
+        freePlayDescription.classList.add('visible');
+    });
+
+    freePlayBtn.addEventListener('mousemove', (event) => {
+        freePlayDescription.style.left = `${event.clientX}px`;
+        freePlayDescription.style.top = `${event.clientY}px`;
+    });
+
+    freePlayBtn.addEventListener('mouseleave', () => {
+        freePlayDescription.classList.remove('visible');
+    });
 
     const aroundTheWorldBtn = document.querySelector('#aroundTheWorldBtn');
     const downtownCountdownBtn = document.querySelector('#downTownCountdownBtn');
@@ -742,6 +765,19 @@ const setEvents = () => {
 
     // in game: back to the menu at any moment
     document.getElementById('menuBtn').addEventListener('click', goToMenu);
+
+    // in game: the help button opens the shooting explanation, continue (or Escape) closes it again
+    const explanation = document.getElementById('explanation');
+    document.getElementById('helpBtn').addEventListener('click', () => {
+        explanation.hidden = false;
+        document.getElementById('explanationContinue').focus(); // so Enter or Space closes it straight away
+    });
+    document.getElementById('explanationContinue').addEventListener('click', () => {
+        explanation.hidden = true;
+    });
+    window.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') explanation.hidden = true;
+    });
 
     // after game screen: back to the menu, or run it again
     document.getElementById('homeBtn').addEventListener('click', goToMenu);
@@ -846,8 +882,8 @@ const init = async () => {
     scene.add(player.player);
     makeAxisGrid(player.player, 'player', 1);
 
-    const cat = createCat();
-    catMesh = cat.cat; // the cat's y position, used for jumping
+    catParts = createCat();
+    const cat = catParts.cat;
     scene.add(cat);
     makeClickable(cat, toggleCat);
 
@@ -1043,6 +1079,7 @@ const render = (time) => {
 
 
     updateArms(); // update the player's arm rotations based on the target pose
+    catParts.faceTowards(playerMesh.position.x, playerMesh.position.z); // the cat keeps watching the player, on every spot
 
 
     updateJump(delta);

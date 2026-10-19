@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Heat Check – pose 3: SHOOT (right arm straight up, wrist flicked) -->
+  <rect width="512" height="512" fill="#16C7B0"/>
+
+  <g stroke="#1B1030" stroke-width="10" stroke-linejoin="round" stroke-linecap="round">
+    <!-- legs (cropped at the knees) -->
+    <rect x="214" y="456" width="34" height="80" fill="#C68642"/>
+    <rect x="264" y="456" width="34" height="80" fill="#C68642"/>
+    <!-- baggy shorts -->
+    <path d="M182 380 L330 380 L348 476 L264 476 L256 440 L248 476 L164 476 Z" fill="#FFD400"/>
+    <path d="M188 398 L180 460 M324 398 L332 460" stroke="#FFF1D0"/>
+    <!-- shoulders + neck -->
+    <path d="M196 304 C196 278 226 268 256 268 C286 268 316 278 316 304 Z" fill="#C68642"/>
+    <rect x="236" y="232" width="40" height="66" fill="#C68642" stroke="none"/>
+    <path d="M236 236 L236 272 M276 236 L276 272" fill="none"/>
+    <!-- tank top -->
+    <path d="M218 270 L236 270 Q256 302 276 270 L294 270 Q298 300 322 312 L332 396 L180 396 L190 312 Q214 300 218 270 Z" fill="#FF3D8B"/>
+    <path d="M256 312 C272 326 276 340 268 354 C264 360 248 360 244 354 C236 342 244 330 250 322 C252 332 256 334 258 330 C260 324 258 318 256 312 Z" fill="#FFF1D0"/>
+    <!-- head -->
+    <path d="M296 160 L340 146 Q352 152 344 164 L300 178 Z" fill="#FF5A1F"/>
+    <circle cx="204" cy="206" r="13" fill="#C68642"/>
+    <circle cx="308" cy="206" r="13" fill="#C68642"/>
+    <ellipse cx="256" cy="200" rx="52" ry="54" fill="#C68642"/>
+    <!-- backwards cap -->
+    <path d="M200 190 C198 128 314 128 312 190 Q256 176 200 190 Z" fill="#FF5A1F"/>
+    <path d="M238 186 Q238 164 256 164 Q274 164 274 186 Q256 182 238 186 Z" fill="#1B1030"/>
+    <circle cx="256" cy="137" r="7" fill="#FFF1D0"/>
+    <path d="M222 162 Q230 148 244 144" fill="none" stroke="#FFF1D0"/>
+    <!-- face -->
+    <path d="M226 188 L244 186 M268 186 L286 188 M240 228 Q256 240 272 228" fill="none"/>
+  </g>
+  <ellipse cx="238" cy="206" rx="7" ry="10" fill="#1B1030"/>
+  <ellipse cx="274" cy="206" rx="7" ry="10" fill="#1B1030"/>
+  <circle cx="240" cy="202" r="3" fill="#FFF1D0"/>
+  <circle cx="276" cy="202" r="3" fill="#FFF1D0"/>
+
+  <!-- motion lines along the raised arm -->
+  <path d="M112 250 L112 166 M100 178 L112 162 L124 178 M90 226 L90 188" fill="none" stroke="#FFF1D0" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- ARMS: shooting arm straight up, off arm low -->
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M202 294 L162 126 M312 294 L346 414" stroke="#1B1030" stroke-width="46"/>
+    <path d="M202 294 L162 126 M312 294 L346 414" stroke="#C68642" stroke-width="26"/>
+    <!-- flicked wrist (gooseneck hand) -->
+    <path d="M162 128 L158 100 Q160 82 176 86 Q188 90 186 104" stroke="#1B1030" stroke-width="50"/>
+    <path d="M162 128 L158 100 Q160 82 176 86 Q188 90 186 104" stroke="#C68642" stroke-width="30"/>
+  </g>
+  <circle cx="350" cy="430" r="18" fill="#C68642" stroke="#1B1030" stroke-width="10"/>
+  <!-- ball leaving the fingertips -->
+  <circle cx="170" cy="32" r="24" fill="#FF5A1F" stroke="#1B1030" stroke-width="10"/>
+  <path d="M170 10 L170 54 M148 32 L192 32 M156 15 Q165 32 156 49 M184 15 Q175 32 184 49" fill="none" stroke="#1B1030" stroke-width="7" stroke-linecap="round"/>
+</svg>

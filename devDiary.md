@@ -1846,3 +1846,106 @@ The numbers come from the same `Fence` constants as the drawn fence, so the mesh
 - **`filter: grayscale(1)`** removes the colour from the whole button. A filter is used instead of a grey `background-color`, because some buttons get their colour from an id rule (`#menu #aroundTheWorldBtn`), which would win over a `:disabled` rule. A filter applies on top of whatever colour the button has.
 - **`opacity: .55`** fades it, and the stacked shadow is replaced by one thin dark layer, so the button looks pressed flat instead of liftable.
 - **`pointer-events: none`** means the mouse does not reach the button at all, so the `:hover` and `:active` styles cannot start. Keyboard use is already blocked by `disabled` itself.
+
+## Styling for the game mode descriptions and the shooting explanation (index.html)
+
+**What:** CSS for two new UI elements. The game mode descriptions (`.description`) are the tooltips that follow the mouse over the Around the World and Downtown Countdown buttons. The shooting explanation (`#explanation`) is the screen with three steps and a continue button.
+
+**Why:** both had almost no styling. The descriptions were a bare teal block sitting right under the cursor, and the explanation was plain HTML, so neither matched the sticker look of the rest of the UI.
+
+**How it works:**
+
+- **Description, look:** a small teal sticker with the buttons' halftone dots, a dark border, a pink-and-dark hard shadow, and a slight tilt. `max-width: 17em` wraps the longer text over a few lines instead of one long strip.
+- **Description, position:** `script.js` puts its top left corner on the mouse (`left`/`top` from `clientX`/`clientY`). The `transform: translate(1.2em, 1em)` moves it a little down and to the right, so it never covers the pointer or the text the player is reading. `pointer-events: none` keeps it from catching the mouse.
+- **Description, appearing:** hidden it has `opacity: 0` and is slightly smaller and lower (`scale(.9)`, a bit more `translate`). `.description.visible` sets the full size and opacity, and the `transition` on both makes it pop up. The rule became `.description.visible` instead of just `.visible`, so the class only does something on these tooltips. With reduced motion only the fade is kept.
+- **Explanation screen:** a full-screen frosted layer (`position: fixed; inset: 0`, the same dark tint and blur as the after game screen) with `z-index: 8`, in front of everything else. `#explanation[hidden] { display: none; }` is needed because `display: flex` would otherwise win over the `hidden` attribute.
+- **The three steps:** a wrapping flex row of cream sticker cards with pink shadows, each tilted a little differently (`nth-child`). In each card, the first `<p>` (the step's name) becomes a pink tag, and the last `<p>` (the sentence) uses a plain bold system font so it reads easily.
+- **Pictures:** the image is a framed teal square (`aspect-ratio: 1`). `img[src=""]` is hidden, so the empty placeholders do not show as broken images until real pictures are added.
+- **Continue button:** written for `#explanation > button` with the same yellow sticker look, hover lift and press as the menu buttons. The shared button rules only cover `#menu` and `#afterGame`, so this button would otherwise get none of it.
+
+## Free play description (index.html, script.js)
+
+**What:** a description tooltip for the FreePlay button (`#freePlayDescription`, "Shoot around at your own pace: no timer, no pressure!"), like the ones for the two timed modes.
+
+**Why:** FreePlay was the only mode button without an explanation.
+
+**How it works:** the same pattern as the other two descriptions. The `<div class="description">` sits in `#menu` and gets all its styling from the shared `.description` rules. In `setEvents`, `mouseover` adds the `visible` class (the sticker pops up), `mousemove` puts its corner on the mouse with `clientX`/`clientY`, and `mouseleave` takes the class off again.
+
+## The cat is a sleeping cat (objects/cat.js, constants/cat.js)
+
+**What:** `createCat()` builds a curled-up sleeping cat from primitives instead of a single 20 cm cube: a low body, a head resting on two front paws, two pointy ears, closed eyes, a pink nose and a tail wrapped round the front. All sizes moved into the `Cat` constants. The cat also gets a random fur colour from `catColors` now (before, `randomColorIndex` was worked out but `catColors[0]` was always used), and `cat.js` imports `three/webgpu` instead of `three`, like the other objects.
+
+**Why:** the cube did not read as a cat at all. And every three.js object in the game has to come from `three/webgpu`: mixing it with plain `three` gives two copies of the library, whose materials the WebGPU renderer does not handle the same way.
+
+**How it works:**
+
+- **Same building blocks as the boombox:** an `addBox` helper (a box with its outline shell) and flat `MeshBasicMaterial`s, so the cat matches the player's and the boombox's flat look. The origin is on the floor under the middle of the body, and every part is placed by its middle, so things lying on the floor are lifted by half their height.
+- **The pose:** a cat sleeping curled up is a low loaf, so the body is wide and only 15 cm high. The head sits at the `-x` end, partly on the body, lying on two flat paws that stick out 2 cm in front of the face.
+- **Head group:** the head, ears, eyes and nose are children of one `Object3D` (a pivot, like the shoulder joints). `rotation.x` on that group rolls the whole head onto its side, which is how cats sleep, and every part of the face moves along.
+- **Ears:** `ConeGeometry` with only 4 sides is a small pyramid, which fits the low-poly look. `rotation.y = Math.PI / 4` turns a flat side, not a corner, to the front.
+- **Closed eyes:** two very thin dark boxes on the face, without outlines (they are lines already). They sit 2 mm in front of the face so they do not flicker inside it (z-fighting).
+- **Tail:** one straight piece along the front side of the body on the floor, and a short tip turned with `rotation.y` so it curls in towards the paws.
+- **Clicking:** `makeClickable(cat, toggleCat)` in `script.js` raycasts against the whole group, so clicking any part of the cat still plays its sound.
+
+## The cat stands up when clicked (objects/cat.js, constants/cat.js, script.js)
+
+**What:** the cat has two poses: asleep (curled up, the pose from before) and awake (standing on four legs, head up, eyes open, tail straight up). Clicking it plays its sound and makes it stand. Clicking again, or the sound ending by itself, curls it up again. `createCat()` now returns `{ cat, setAwake }` instead of only the group. In `script.js` the unused `catMesh` became `catParts`.
+
+**Why:** the click only played a sound, and nothing on screen reacted to it.
+
+**How it works:**
+
+- **Two poses, built once:** `createSleeping()` and `createStanding()` each build a complete cat in their own `Object3D`. Both go into the `cat` group, and only one is `visible` at a time. `setAwake(awake)` flips the two `visible` flags. Building both up front means switching costs nothing, and the poses never have to be rebuilt.
+- **Shared head:** `createHead(..., awake)` builds the head with its ears, eyes and nose for both poses. Awake, the eyes are small dark squares (`eye.openHeight`). Asleep, they are the thin closed lines.
+- **The standing pose:** a slimmer body (`Cat.standing`) lifted by the leg height, four legs under its corners placed with one loop over the four (x, z) corners, the head up in front, and the tail as an upright box at the back, leaned back with `rotation.z`.
+- **Same colour in both poses:** the materials (fur, pink, dark) are made once in `createCat()` and passed to both builders, so the random fur colour is the same awake and asleep.
+- **The return value:** like the player's `{ player, joints }`, `createCat()` returns the group to add to the scene plus a function to control it: `{ cat, setAwake }`. The game changes the pose without searching the scene graph.
+- **Kept in step with the sound:** `toggleCat` checks `cat.paused` (the `Audio` object) to choose. If paused, it plays the sound and calls `setAwake(true)`. Otherwise it pauses and calls `setAwake(false)`. An `ended` listener on the audio puts the cat back to sleep when the sound finishes by itself, so the pose always matches whether the sound is playing.
+- **Clicking:** `makeClickable(cat, toggleCat)` gets `catParts.cat`, the whole group. The raycaster only hits visible meshes, so it works in both poses.
+
+## The cat faces the player (objects/cat.js, script.js)
+
+**What:** the cat turns around y so its face looks at the player, in both poses, and keeps following the player from spot to spot. `createCat()` returns a third function, `faceTowards(x, z)`. The render loop calls it every frame with the player's position.
+
+**Why:** it lay at a fixed angle, side-on to the court. A first version made it look at the basket, but it should watch the player.
+
+**How it works:**
+
+- **The angle:** the head is built on the cat's own -x side. Turning an object by an angle around y moves its -x direction to `(-cos(angle), sin(angle))` on the floor, in three.js's rotation convention. The direction from the cat to the point is `(x - cat.x, z - cat.z)`. Setting `-cos(angle)` and `sin(angle)` proportional to those two gives `angle = atan2(toZ, -toX)`. It is the same `atan2` idea as the spots' `facing` angle in `constants/court.js`, only for a model whose front is -x instead of +z.
+- **Every frame:** the player moves to a new spot after makes, jumps, and goes to the deep spot. Calling `faceTowards(playerMesh.position.x, playerMesh.position.z)` in `render` covers every one of those without hooking into each place that moves the player. It is only an `atan2` per frame, so it costs nothing.
+- **Both poses:** the rotation is on the outer `cat` group, so the sleeping and the standing pose both turn with it.
+
+## Shooting explanation text matches the detection (index.html)
+
+**What:** the three steps in `#explanation` are in the order a shot is done (get ready, load, shoot) and numbered, the texts are rewritten, and each picture got an `alt` text.
+
+**Why:** the old texts did not match what `motionDetection.js` checks. "Loading your arms" did not say what to do, "fast" was vague, and the most important rule, releasing while the meter is in the green zone, was missing. The reset step came first, while a shot starts with the arms down.
+
+**How it works:** each text now describes the pose the code detects:
+
+- **Get ready:** the `default` pose. Both arms straight (elbow at least 160°) with the wrist clearly below the elbow. It resets the meter.
+- **Load:** the `loaded` pose. Both elbows bent (under 110°) with the hands below the shoulders. It starts the meter.
+- **Shoot:** the `released` pose. One arm with the elbow opened and the wrist above the head (`some` arm, so one is enough). The text adds the green zone, because the timing decides the shot.
+
+The `alt` texts describe each pose for screen readers and for when a picture does not load. The `src` values stay empty until the pictures exist in `public/images/`: the CSS hides an image with an empty `src`, while a wrong path would show a broken-image icon.
+
+## Help button opens the shooting explanation (index.html, script.js)
+
+**What:** a "Help" button in the game view (`#helpBtn`, top right, just left of the Menu button). Clicking it opens the `#explanation` popup. The popup's continue button (now `#explanationContinue`) or the Escape key closes it.
+
+**Why:** the explanation of the shooting poses existed but could not be opened.
+
+**How it works:**
+
+- **Look:** the help button shares every rule of the Menu button: each `#menuBtn` selector (base, hover, active, focus, disabled) got `#helpBtn` added. A separate `#helpBtn` rule after them only changes what differs: teal instead of yellow, and its position. Both buttons have the same font size, so `right: calc(2.2% + 6.6em)` is the Menu button's spot plus its width and a small gap.
+- **Opening:** the click sets `explanation.hidden = false`. The CSS rule `#explanation[hidden] { display: none; }` does the hiding, so this one flag is enough. Focus moves to the continue button, so Enter or Space closes the popup right away and keyboard users land inside it.
+- **Closing:** continue sets `hidden = true` again, and a `keydown` listener does the same for Escape.
+- **Covered in the menu:** like the Menu button, it sits in the HTML before `#menu`, so the full-screen menu covers it while it is open.
+
+## Explanation pictures linked (index.html)
+
+**What:** the three `<img>` tags in `#explanation` point to the SVG pictures in `public/images/` (`explanation-1-ready.svg`, `explanation-2-load.svg`, `explanation-3-shoot.svg`).
+
+**Why:** the pictures had been added to the project, but the `src` values were still empty, and the CSS hides an image with an empty `src`.
+
+**How it works:** Vite copies everything in `public/` unchanged into the build and serves it from the site's root. So `public/images/x.svg` is reached as `images/x.svg`, without `public/`. The path is relative (no leading `/`), which fits `base: './'` in `vite.config.js`: on GitHub Pages the game lives in a subfolder (`/heatCheck/`), and a path starting with `/` would look in the domain's root instead.

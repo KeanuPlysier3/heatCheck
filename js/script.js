@@ -9,6 +9,8 @@ import { createEnvironment } from './environment';
 import { createPlayer, playerMaterial } from './objects/player';
 import { Court } from './constants/court';
 import { createHoop } from './objects/hoop';
+import { createBoombox } from './objects/boombox';
+import { Boombox } from './constants/boombox';
 import { Colors } from './constants/colors';
 import { Player } from './constants/player';
 import { createBasketball } from './objects/basketball';
@@ -22,6 +24,8 @@ import { resizeRendererToDisplaySize } from './helpers/resizeRenderer.js';
 import { uploadScore, fetchScores } from './db.js';
 import { math } from '@tensorflow/tfjs-core';
 import { draw } from '@tensorflow/tfjs-core/dist/ops/browser.js';
+import {makeClickable, setupPointer} from './helpers/pointer.js';
+
 
 //FLAGS
 let mode = 'menu';       // 'menu' | 'freePlay' | 'aroundTheWorld' | 'downtownCountdown'
@@ -30,7 +34,11 @@ let shotPhase = 'idle';  // 'idle' | 'aiming' | 'flying' | 'landing' | 'shrinkin
 let passedTop = false;
 let jumping = false;
 let performanceMode = localStorage.getItem('performanceMode') ? localStorage.getItem('performanceMode') : 'false'; // if true, the environment is not drawn, to save performance
+let freeCam = false;
 let deepshotsOnly = false;
+// true when the game runs under "npm run dev", false in a build. the online scores need a database, which the dev setup does not have
+const isDev = import.meta.env.DEV;
+
 // true while the ball sits in the hand
 const ballIsHeld = () => shotPhase === 'idle' || shotPhase === 'aiming';
 
@@ -44,7 +52,10 @@ let fire; // the basketball's fire shader uniforms, used to update the flame eve
 let controls;
 let joints; // the player's shoulder and elbow pivots, filled in init
 let playerMesh; // the player's y position, used for jumping
+let boomboxScreen; // the boombox's screen mesh, its material gets a shader later
+let boomboxMesh; // the whole boombox, so it can bump to the beat
 
+let colorIndex = 0;
 let stopWatch = 0;   // seconds elapsed in the current run
 let timeInterval;    // the id of the stopwatch's setInterval, so endTimer can stop it
 let countdownTimeout; // the id of the 3-2-1 countdown's current setTimeout, so goToMenu can stop it
@@ -102,6 +113,11 @@ const poseHold = {
 };
 let poseUntil = 0; // the current pose is kept until this time
 let jumpDelay = null; // the jump waiting to start (a setTimeout id), or null when none is waiting
+
+
+const toggleBoombox = () => {   
+    track.paused ? track.play() : track.pause();
+}
 
 const handlePose = (arms) => {
     const now = performance.now();
@@ -172,6 +188,14 @@ const lerp = (currentValue, targetValue) => {
     currentValue += (targetValue - currentValue) * 0.2;
     return currentValue;
 }
+
+const updateBoombox = (time) => {
+    const playing = !track.paused && !track.muted;
+    const large = playing && Math.floor(time / Boombox.bumpInterval) % 2 === 1;   // the clock decides: small, large, small, large...
+    const up = large ? Boombox.bumpUp : 0;
+    const side = large ? Boombox.bumpSide : 0;
+    boomboxMesh.scale.set(1 + side, 1 + up, 1 + side);   // the origin is on the floor, so it grows upwards from its feet
+};
 
 const handPoint = (side) => {
     return joints[side].elbow.localToWorld(new THREE.Vector3(0.15, -Player.forearmLength, 0.15));
@@ -429,6 +453,7 @@ const updateStatsDisplay = () => {
 // back to the main menu, from the after game screen or in the middle of a run
 // shows the leaderboard card with the top 10 of a mode: called when a run starts
 const showLeaderboard = (leaderboardMode) => {
+    if (isDev) return;   // no database in dev: the card stays hidden
     document.getElementById('leaderboard').hidden = false;
     loadLeaderboard(leaderboardMode); // not awaited: the run starts at once, the list fills in when the answer arrives
 };
@@ -607,10 +632,7 @@ const drawGreen = (width = Meter.greenWidth) => {
 
 
 //PLAYER COLOUR
-let colorIndex = 0;   // which of Colors.playerColors the player has, 0 is the default
 
-// step is 1 for the next colour and -1 for the previous one, and it wraps around at both ends.
-// playerMaterial is shared by every part of the game player and the menu player, so one change updates them all
 const changePlayerColor = (step) => {
     const total = Colors.playerColors.length;
     colorIndex = (colorIndex + step + total) % total;
@@ -625,6 +647,11 @@ const setEvents = () => {
         document.querySelector('#performanceModeCheckbox').checked = true;
     }
 
+
+    document.querySelector('#freeCam').addEventListener('change', (event) => {
+    freeCam = !freeCam;
+    });
+
     // the colour arrows on the menu: previous and next colour for the player
     document.querySelector('#colorPrev').addEventListener('click', () => changePlayerColor(-1));
     document.querySelector('#colorNext').addEventListener('click', () => changePlayerColor(1));
@@ -636,8 +663,10 @@ const setEvents = () => {
     });
 
     const uploadBtn = document.querySelector('#uploadScoreBtn');
+    uploadBtn.hidden = isDev;   // nothing to upload to in dev
 
     uploadBtn.addEventListener('click', async () => {
+        if (isDev) return;
         uploadBtn.disabled = true; // no second click while sending (the :disabled css greys it out)
         uploadBtn.textContent = 'Sending…';
         try {
@@ -756,6 +785,14 @@ const init = async () => {
     scene.add(court);
     makeAxisGrid(court, 'court', 15);
 
+
+    const boomboxParts = createBoombox();
+    boomboxScreen = boomboxParts.screen;
+    boomboxMesh = boomboxParts.boombox;
+    makeClickable(boomboxParts.boombox, toggleBoombox);
+    scene.add(boomboxParts.boombox);
+
+
     if (performanceMode === 'false') {
         const environment = createEnvironment();
         scene.add(environment);
@@ -791,9 +828,12 @@ const init = async () => {
     placeCamera(true); // the goal is the menu pose too, so there is nothing to glide yet
     gui.add(controls, 'enabled').name('orbit camera (debug)'); // checkbox to switch the mouse control off
 
-
+    
+    setupPointer(canvas, camera);
     setEvents(); // hook up every button and key in one place
 }
+
+
 
 const handleDeepshotsOnly = () => {
     let spot;
@@ -865,6 +905,7 @@ const formatTime = (seconds) => `${Math.floor(seconds / 60)}:${(seconds % 60).to
 
 
 const loadLeaderboard = async (leaderboardMode) => {
+    if (isDev) return;   // no database in dev: nothing to ask for
     const list = document.getElementById('leaderboard__list');
     const status = document.getElementById('leaderboard__status');
     const isTime = leaderboardMode === 'aroundTheWorld';
@@ -949,7 +990,10 @@ const render = (time) => {
         camera.updateProjectionMatrix();
     }
 
-    smoothCamera(delta); // glide towards the camera goal set by placeCamera
+    if (!freeCam) {
+        smoothCamera(delta); 
+    }
+
     controls.update(); // DEBUG ONLY: needed every frame for the orbit camera's damping
 
 
@@ -958,6 +1002,7 @@ const render = (time) => {
 
     updateJump(delta);
     updateBallReturn(delta); // landing, shrinking and growing back of the ball after a shot
+    updateBoombox(time); // the boombox switches between small and large while the music plays
 
 
     const p = ballBody.translation();

@@ -34,6 +34,7 @@ let shotPhase = 'idle';  // 'idle' | 'aiming' | 'flying' | 'landing' | 'shrinkin
 let passedTop = false;
 let jumping = false;
 let performanceMode = localStorage.getItem('performanceMode') ? localStorage.getItem('performanceMode') : 'false'; // if true, the environment is not drawn, to save performance
+let freeCam = false;
 let deepshotsOnly = false;
 // true when the game runs under "npm run dev", false in a build. the online scores need a database, which the dev setup does not have
 const isDev = import.meta.env.DEV;
@@ -646,6 +647,11 @@ const setEvents = () => {
         document.querySelector('#performanceModeCheckbox').checked = true;
     }
 
+
+    document.querySelector('#freeCam').addEventListener('change', (event) => {
+    freeCam = !freeCam;
+    });
+
     // the colour arrows on the menu: previous and next colour for the player
     document.querySelector('#colorPrev').addEventListener('click', () => changePlayerColor(-1));
     document.querySelector('#colorNext').addEventListener('click', () => changePlayerColor(1));
@@ -984,7 +990,10 @@ const render = (time) => {
         camera.updateProjectionMatrix();
     }
 
-    smoothCamera(delta); // glide towards the camera goal set by placeCamera
+    if (!freeCam) {
+        smoothCamera(delta); 
+    }
+
     controls.update(); // DEBUG ONLY: needed every frame for the orbit camera's damping
 
 

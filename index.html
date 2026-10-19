@@ -920,6 +920,13 @@
             /* display: flex above would beat the hidden attribute */
         }
 
+        /* free cam: in the game, top right, under the timer and the deep shot checkbox */
+        #freeCam {
+            position: absolute;
+            top: 12%;
+            right: 2.2%;
+        }
+
         @media (prefers-reduced-motion: reduce) {
 
             .stickerCheckbox input,
@@ -1250,6 +1257,11 @@
 
     <button id="menuBtn">Menu</button>
 
+    <label id="freeCam" class="stickerCheckbox">
+        <input type="checkbox" id="freeCamCheckbox">
+        <span>free cam</span>
+    </label>
+
     <div id="menu">
         <div id="menu__buttons">
             <h1 id="menu__logo" aria-label="heatCheck"><span class="heat">heat</span><span class="check">Check</span>
@@ -1262,7 +1274,7 @@
                 <span>performance mode</span>
             </label>
         </div>
-        <!-- the player's name, above the character: used for the online leaderboard -->
+  
         <label id="menu__name">
             <span class="menu__nameTag">player</span>
             <input type="text" id="usernameInput" placeholder="your name" maxlength="16" pattern="[A-Za-z0-9]{1,16}"

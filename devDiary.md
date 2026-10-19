@@ -1701,22 +1701,6 @@ The numbers come from the same `Fence` constants as the drawn fence, so the mesh
 
 **How it works:** in `checkMadeShot()` the counters every make shares (`madeShots`, `streak`) are raised first. Then the `if` picks the points: on a hot streak in downtown countdown the make was the deep shot (+3, the spot rotation does not move on), otherwise it is a normal make (+2, and `spotProgress` counts towards the next spot). Keeping `madeShots++` outside the `if` means a deep make also counts for the shooting percentage, which before it did not.
 
-## Performance mode checkbox (index.html)
-
-**What:** a checkbox labelled "performance mode" in the menu, under the three mode buttons (`#performanceMode` with the input `#performanceModeCheckbox`), with its own CSS. It only looks and clicks for now: nothing reads it yet.
-
-**Why:** the environment (street, buildings, track, stands) costs frame rate next to MoveNet. The checkbox is the switch to skip it on slow machines.
-
-**How it works:** the `<input>` sits inside the `<label>`, so clicking the text also ticks the box. `appearance: none` removes the browser's own checkbox, so the input can be drawn like the menu's buttons: a cream square with a dark border and the same stacked hard shadow (pink, then dark purple). The tick is the `::after` of the input: a narrow rectangle with only a right and a bottom border, turned 45 degrees, which makes a check mark. It is `scale(0)` (invisible) normally and grows to `scale(1)` on `:checked`, while the box turns lime. The label is skewed like the buttons, and the cream text gets a dark hard shadow so it reads on the blue menu.
-
-## Deep shot only checkbox (index.html)
-
-**What:** a second sticker checkbox, "deep shot only" (`#deepShotsOnly`, input `#deepShotOnlyCheckbox`), meant for free play only. It is in the HTML with the `hidden` attribute and placed top right in the game view, where the timer sits in the timed modes (free play hides the timer, so the spot is free). Showing it in free play and what it does is logic still to be written.
-
-**Why:** in free play you can practise the deep shot on its own.
-
-**How it works:** the checkbox CSS that was written for performance mode is now a class, `.stickerCheckbox`, so both checkboxes share one look (the cream box, the shadow, the lime tick) and only their positions differ: `#performanceMode` keeps a small top margin under the menu buttons, `#deepShotsOnly` is `position: absolute` in the top right. Because `.stickerCheckbox` sets `display: flex`, a CSS rule beats the browser's own `[hidden] { display: none }`, so `#deepShotsOnly[hidden] { display: none; }` is added to make `hidden = true` still hide it. It sits outside `#menu`, because the menu is hidden while playing.
-
 ## Jump delay fix (script.js, handlePose)
 
 **What:** the delayed jump when the arms start rising works now. `jumpDelay` moved out of `handlePose` to a variable next to `poseUntil`, a new timer only starts when none is waiting and the player is not already jumping, and the waiting jump is cancelled when the arms go back to the default pose.
@@ -1740,19 +1724,6 @@ The numbers come from the same `Fence` constants as the drawn fence, so the mesh
 **Why:** pressing Menu during the 3-2-1 left the countdown running. When it finished, `startAroundTheWorld` / `startDowntownCountdown` carried on after their `await showCountDown(3)` and started a run behind the open menu, timer and all.
 
 **How it works:** `showCountDown` waits each second with `new Promise(resolve => setTimeout(resolve, 1000))`: the promise resolves when the timeout calls `resolve`. Its id is now stored in `countdownTimeout` (only one is waiting at a time, the countdown goes number by number). `clearTimeout(countdownTimeout)` cancels it, so `resolve` is never called and the promise stays pending: the code after `await` in the start function simply never runs, so the run is never started. A pending promise that nothing refers to any more is cleaned up by the browser, so nothing leaks. `clearTimeout` and `clearInterval` with an id that already fired or `undefined` do nothing, so `goToMenu` is safe to call at any moment, also from the after game screen.
-
-## Username field in the menu (index.html)
-
-**What:** a text field above the character in the main menu (`#usernameInput` inside the label `#menu__name`), with a small pink "PLAYER" tag on top. Nothing reads it yet: it is where the player will type the name for the online leaderboard.
-
-**Why:** the leaderboard needs a name per upload. Asking once in the menu means the player does not have to type it after every round.
-
-**How it works:**
-
-- **Place:** the label is `position: absolute` in `#menu`, at `left: 65%`, the middle of the character's canvas (the canvas starts at 50% and is 30% wide), and `translateX(-50%)` centres it on that point. `top: 6%` puts it just above the canvas (which starts at 10%), and `z-index: 1` keeps it in front of the canvas where they overlap.
-- **Look:** the field uses the menu's sticker style: the Bowlby One font in capitals, a cream background with faint halftone dots, a dark border, and a stacked hard shadow (teal, then dark purple), skewed like the buttons. The "PLAYER" tag is a small pink sticker that overlaps the field's top edge (negative bottom margin).
-- **Feedback:** on `:focus` the field lifts off its shadow and the shadow turns pink, like a hovered button. `:invalid` (with `:not(:placeholder-shown)`, so an empty field is not marked) turns the shadow orange when the name breaks the pattern.
-- **Rules in the HTML:** `maxlength="16"` stops typing after 16 characters (the `VARCHAR(16)` in the table), and `pattern="[A-Za-z0-9]{1,16}"` only accepts letters and numbers. These are only for the player's convenience: `scores.php` must check the same again, because the browser's checks can be bypassed.
 
 ## Score upload fixed, and scores.php (db.js, script.js, constants/api.js, server/)
 
@@ -1821,56 +1792,6 @@ The numbers come from the same `Fence` constants as the drawn fence, so the mesh
 - **An `<ol>` that looks like a table:** the list has `list-style: none`, and each `<li>` is a CSS grid with three columns (`2em 1fr auto`: rank, name, result). The header row above it uses the same grid, so the columns line up. The rank is drawn by a CSS counter (`counter-increment` on each row, shown in `li::before`), which puts the number in its own column. Even rows are striped, the first place is yellow.
 - **Place:** the card is inside `#afterGame` with `position: absolute`, `right` and `bottom`, so it shows and hides together with that screen.
 
-## Leaderboard visible during the whole run (index.html, script.js)
-
-**What:** the leaderboard card is now on screen from the moment a timed mode starts, not only on the after game screen. New function `showLeaderboard(mode)`. The card moved out of `#afterGame` in the HTML and starts `hidden`.
-
-**Why:** the scores to beat should be visible while playing.
-
-**How it works:**
-
-- **Showing:** `handleAroundTheWorldClick` and `handleDowntownCountdownClick` call `showLeaderboard()` with their mode. It unhides the card and calls `loadLeaderboard`, so the list is that mode's top 10. The mode is passed as text, because the `mode` variable is only set a moment later in the start functions.
-- **Refreshing:** unchanged. `loadLeaderboard(mode)` still runs when the round ends and after an upload, so the list is fresh at the moments it matters.
-- **Hiding:** `goToMenu()` and `handleFreeplayClick()` set `hidden = true`. Free play has no scores, and in the menu the card would sit on top of the menu.
-- **Place:** the card was a child of `#afterGame`, so it could only show with that screen. Now it stands on its own, with `position: fixed` (placed against the window) and `z-index: 7`, one above the after game screen's 6, so it stays in front of that screen's blurred layer. `right: 7.5%` keeps it left of the shot meter on the right edge.
-
-## Disabled state for the buttons (index.html, script.js)
-
-**What:** a `:disabled` style for the menu buttons, the after game buttons and the in-game Menu button: grey, faded, with a flat shadow, and no hover or press effect. In `script.js` the line `uploadBtn.classList.add('disabled')` was removed.
-
-**Why:** the upload button is disabled while sending and after a successful upload, but it looked exactly like a button that still works.
-
-**How it works:**
-
-- **`:disabled`** is a CSS state the browser switches on by itself for a button with `disabled = true`, and off again with `disabled = false`. No class is needed. The removed `classList.add('disabled')` was never taken off again, so a class-based style would have stayed grey for every later round.
-- **`filter: grayscale(1)`** removes the colour from the whole button. A filter is used instead of a grey `background-color`, because some buttons get their colour from an id rule (`#menu #aroundTheWorldBtn`), which would win over a `:disabled` rule. A filter applies on top of whatever colour the button has.
-- **`opacity: .55`** fades it, and the stacked shadow is replaced by one thin dark layer, so the button looks pressed flat instead of liftable.
-- **`pointer-events: none`** means the mouse does not reach the button at all, so the `:hover` and `:active` styles cannot start. Keyboard use is already blocked by `disabled` itself.
-
-## Styling for the game mode descriptions and the shooting explanation (index.html)
-
-**What:** CSS for two new UI elements. The game mode descriptions (`.description`) are the tooltips that follow the mouse over the Around the World and Downtown Countdown buttons. The shooting explanation (`#explanation`) is the screen with three steps and a continue button.
-
-**Why:** both had almost no styling. The descriptions were a bare teal block sitting right under the cursor, and the explanation was plain HTML, so neither matched the sticker look of the rest of the UI.
-
-**How it works:**
-
-- **Description, look:** a small teal sticker with the buttons' halftone dots, a dark border, a pink-and-dark hard shadow, and a slight tilt. `max-width: 17em` wraps the longer text over a few lines instead of one long strip.
-- **Description, position:** `script.js` puts its top left corner on the mouse (`left`/`top` from `clientX`/`clientY`). The `transform: translate(1.2em, 1em)` moves it a little down and to the right, so it never covers the pointer or the text the player is reading. `pointer-events: none` keeps it from catching the mouse.
-- **Description, appearing:** hidden it has `opacity: 0` and is slightly smaller and lower (`scale(.9)`, a bit more `translate`). `.description.visible` sets the full size and opacity, and the `transition` on both makes it pop up. The rule became `.description.visible` instead of just `.visible`, so the class only does something on these tooltips. With reduced motion only the fade is kept.
-- **Explanation screen:** a full-screen frosted layer (`position: fixed; inset: 0`, the same dark tint and blur as the after game screen) with `z-index: 8`, in front of everything else. `#explanation[hidden] { display: none; }` is needed because `display: flex` would otherwise win over the `hidden` attribute.
-- **The three steps:** a wrapping flex row of cream sticker cards with pink shadows, each tilted a little differently (`nth-child`). In each card, the first `<p>` (the step's name) becomes a pink tag, and the last `<p>` (the sentence) uses a plain bold system font so it reads easily.
-- **Pictures:** the image is a framed teal square (`aspect-ratio: 1`). `img[src=""]` is hidden, so the empty placeholders do not show as broken images until real pictures are added.
-- **Continue button:** written for `#explanation > button` with the same yellow sticker look, hover lift and press as the menu buttons. The shared button rules only cover `#menu` and `#afterGame`, so this button would otherwise get none of it.
-
-## Free play description (index.html, script.js)
-
-**What:** a description tooltip for the FreePlay button (`#freePlayDescription`, "Shoot around at your own pace: no timer, no pressure!"), like the ones for the two timed modes.
-
-**Why:** FreePlay was the only mode button without an explanation.
-
-**How it works:** the same pattern as the other two descriptions. The `<div class="description">` sits in `#menu` and gets all its styling from the shared `.description` rules. In `setEvents`, `mouseover` adds the `visible` class (the sticker pops up), `mousemove` puts its corner on the mouse with `clientX`/`clientY`, and `mouseleave` takes the class off again.
-
 ## The cat is a sleeping cat (objects/cat.js, constants/cat.js)
 
 **What:** `createCat()` builds a curled-up sleeping cat from primitives instead of a single 20 cm cube: a low body, a head resting on two front paws, two pointy ears, closed eyes, a pink nose and a tail wrapped round the front. All sizes moved into the `Cat` constants. The cat also gets a random fur colour from `catColors` now (before, `randomColorIndex` was worked out but `catColors[0]` was always used), and `cat.js` imports `three/webgpu` instead of `three`, like the other objects.
@@ -1928,19 +1849,6 @@ The numbers come from the same `Fence` constants as the drawn fence, so the mesh
 - **Shoot:** the `released` pose. One arm with the elbow opened and the wrist above the head (`some` arm, so one is enough). The text adds the green zone, because the timing decides the shot.
 
 The `alt` texts describe each pose for screen readers and for when a picture does not load. The `src` values stay empty until the pictures exist in `public/images/`: the CSS hides an image with an empty `src`, while a wrong path would show a broken-image icon.
-
-## Help button opens the shooting explanation (index.html, script.js)
-
-**What:** a "Help" button in the game view (`#helpBtn`, top right, just left of the Menu button). Clicking it opens the `#explanation` popup. The popup's continue button (now `#explanationContinue`) or the Escape key closes it.
-
-**Why:** the explanation of the shooting poses existed but could not be opened.
-
-**How it works:**
-
-- **Look:** the help button shares every rule of the Menu button: each `#menuBtn` selector (base, hover, active, focus, disabled) got `#helpBtn` added. A separate `#helpBtn` rule after them only changes what differs: teal instead of yellow, and its position. Both buttons have the same font size, so `right: calc(2.2% + 6.6em)` is the Menu button's spot plus its width and a small gap.
-- **Opening:** the click sets `explanation.hidden = false`. The CSS rule `#explanation[hidden] { display: none; }` does the hiding, so this one flag is enough. Focus moves to the continue button, so Enter or Space closes the popup right away and keyboard users land inside it.
-- **Closing:** continue sets `hidden = true` again, and a `keydown` listener does the same for Escape.
-- **Covered in the menu:** like the Menu button, it sits in the HTML before `#menu`, so the full-screen menu covers it while it is open.
 
 ## Explanation pictures linked (index.html)
 
@@ -2058,3 +1966,17 @@ Smaller changes along the way:
 **Why:** related code was spread over the whole file (the camera functions sat below `init`, the leaderboard below the helpers), which made the file hard to find your way around.
 
 **How it works:** the behaviour is the same, because only the order of declarations changed. That is safe because every `const` function is only *called* once the whole file has run. The code that runs straight away is the `START` group at the bottom, so by then every function and variable above it exists. The few top-level statements higher up (creating the audio objects, the debug GUI, `cameraGoal` and the cat's `ended` listener) do not call any function defined below them.
+
+## The CSS in its own file (css/style.css, index.html)
+
+**What:** all the CSS that was in the one `<style>` block in the `<head>` of `index.html` (about 1,370 lines) moved, unchanged, to `css/style.css`. In its place `index.html` has one `<link rel="stylesheet" href="./css/style.css">`, after the Google Fonts link. Only the 8 spaces of HTML indentation in front of every line were removed.
+
+**Why:** `index.html` was mostly CSS (1,530 lines, of which only about 160 were HTML), so the page structure was hard to find. A separate stylesheet keeps the markup and the styling apart.
+
+**How it works:**
+
+- **During development:** Vite follows the `<link>` and serves the file.
+- **In the build:** it bundles the file into `assets/index-[hash].css`. The hash changes whenever the CSS changes, so browsers never keep an old version cached.
+- **The path:** it is relative (`./css/...`), which fits `base: './'` for GitHub Pages.
+- **Order:** the link sits in the same place as the old `<style>` block, after the font link, so every rule wins and loses exactly as before.
+- **Images in the CSS:** the only `url(...)` values are inline `data:` SVGs (the menu's basketball pattern), so no paths had to change.

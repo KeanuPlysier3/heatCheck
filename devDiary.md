@@ -2058,3 +2058,17 @@ Smaller changes along the way:
 **Why:** related code was spread over the whole file (the camera functions sat below `init`, the leaderboard below the helpers), which made the file hard to find your way around.
 
 **How it works:** the behaviour is the same, because only the order of declarations changed. That is safe because every `const` function is only *called* once the whole file has run. The code that runs straight away is the `START` group at the bottom, so by then every function and variable above it exists. The few top-level statements higher up (creating the audio objects, the debug GUI, `cameraGoal` and the cat's `ended` listener) do not call any function defined below them.
+
+## The CSS in its own file (css/style.css, index.html)
+
+**What:** all the CSS that was in the one `<style>` block in the `<head>` of `index.html` (about 1,370 lines) moved, unchanged, to `css/style.css`. In its place `index.html` has one `<link rel="stylesheet" href="./css/style.css">`, after the Google Fonts link. Only the 8 spaces of HTML indentation in front of every line were removed.
+
+**Why:** `index.html` was mostly CSS (1,530 lines, of which only about 160 were HTML), so the page structure was hard to find. A separate stylesheet keeps the markup and the styling apart.
+
+**How it works:**
+
+- **During development:** Vite follows the `<link>` and serves the file.
+- **In the build:** it bundles the file into `assets/index-[hash].css`. The hash changes whenever the CSS changes, so browsers never keep an old version cached.
+- **The path:** it is relative (`./css/...`), which fits `base: './'` for GitHub Pages.
+- **Order:** the link sits in the same place as the old `<style>` block, after the font link, so every rule wins and loses exactly as before.
+- **Images in the CSS:** the only `url(...)` values are inline `data:` SVGs (the menu's basketball pattern), so no paths had to change.

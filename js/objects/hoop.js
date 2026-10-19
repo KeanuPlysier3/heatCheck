@@ -25,12 +25,12 @@ export const createHoop = () => {
     rimMesh.rotation.x = Math.PI / 2; // a torus stands upright by default, lay it flat
     hoop.add(rimMesh);
 
-    // outline
+    // rim outline
     const rimOutlineGeometry = new THREE.TorusGeometry(rimRadius, rimThickness + Outline.thickness, 16, 100);
     const rimOutlineMesh = createOutlineMesh(rimOutlineGeometry);
     rimMesh.add(rimOutlineMesh);
 
-    // backboard:
+    // backboard
     const backboardFront = rimRadius + rimThickness; // the ring's outer edge is rimRadius + rimThickness from its centre
     const backboardBack = backboardFront + backboardThickness;
     const backBoardGeometry = new THREE.BoxGeometry(backboardWidth, backboardHeight, backboardThickness);
@@ -45,7 +45,7 @@ export const createHoop = () => {
     const backBoardOutlineMesh = createOutlineMesh(backBoardOutlineGeometry);
     backBoardMesh.add(backBoardOutlineMesh);
 
-    // standing pole, lower than playing surface.
+    // pole
     const poleZ = rimFromBaseline + poleBehindBaseline; // from the rim to the baseline, then on to the pole
     const poleLength = poleHeight + Court.thickness; // from the surround up to the top
     const poleGeometry = new THREE.CylinderGeometry(poleRadius, poleRadius, poleLength);
@@ -55,12 +55,12 @@ export const createHoop = () => {
     poleMesh.castShadow = true;
     hoop.add(poleMesh);
 
-    //pole ouline
+    // pole outline
     const poleOutlineGeometry = new THREE.CylinderGeometry(poleRadius + Outline.thickness, poleRadius + Outline.thickness, poleLength + Outline.thickness * 2);
     const poleOutlineMesh = createOutlineMesh(poleOutlineGeometry);
     poleMesh.add(poleOutlineMesh);
 
-    //pole arm
+    // pole arm
     const armLength = poleZ - backboardBack;
     const armGeometry = new THREE.BoxGeometry(armThickness, armThickness, armLength);
     const armMaterial = new THREE.MeshPhongMaterial({ color: Colors.hoopPole, emissive: Colors.hoopPole });
@@ -69,12 +69,12 @@ export const createHoop = () => {
     armMesh.castShadow = true;
     hoop.add(armMesh);
 
-    //pole arm outline
+    // pole arm outline
     const armOutlineGeometry = new THREE.BoxGeometry(armThickness + Outline.thickness * 2, armThickness + Outline.thickness * 2, armLength + Outline.thickness * 2);
     const armOutlineMesh = createOutlineMesh(armOutlineGeometry);
     armMesh.add(armOutlineMesh);
 
-    //place at correct rim position.
+    // position
     hoop.position.set(0, 0, Court.Hoop.rimZ);
 
     return hoop;

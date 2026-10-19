@@ -3,8 +3,10 @@ import { Boombox } from '../constants/boombox';
 import { Colors } from '../constants/colors';
 import { Outline } from '../constants/outline';
 import { createOutlineMesh } from '../helpers/outline';
+import { uv, uniform } from 'three/tsl';
+import { visualiserFn } from '../shaders/visualisers.js';
 
-// a flat, bright material like the player's: it ignores the light, so the colours stay as they are
+
 const flat = (color) => new THREE.MeshBasicMaterial({ color });
 
 
@@ -17,7 +19,7 @@ const addBox = (parent, width, height, depth, color, x, y, z) => {
     return mesh;
 };
 
-// a round disc facing the front (+z) with a black outline, put at (x, y, z) inside parent
+//disc 
 const addDisc = (parent, radius, depth, color, x, y, z) => {
     const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, depth, 16), flat(color));
     mesh.rotation.x = Math.PI / 2; // a cylinder stands upright by default, turn it so its flat side faces the front
@@ -27,7 +29,7 @@ const addDisc = (parent, radius, depth, color, x, y, z) => {
     return mesh;
 };
 
-// returns the whole boombox and its screen. the screen is a plain dark plane for now: later its material gets the shader
+//boombox
 export const createBoombox = () => {
     const boombox = new THREE.Object3D();
     const { width, height, depth } = Boombox;
@@ -36,27 +38,30 @@ export const createBoombox = () => {
     // body
     addBox(boombox, width, height, depth, Colors.accent, 0, height / 2, 0);
 
-    // speakers: a dark ring and a cream cone sticking out a little further
+
     [-Boombox.speakerX, Boombox.speakerX].forEach((x) => {
         addDisc(boombox, Boombox.speakerRadius, Boombox.speakerDepth, Colors.outline, x, height / 2, front + Boombox.speakerDepth / 2);
         addDisc(boombox, Boombox.coneRadius, Boombox.speakerDepth, Colors.hoopBackboard, x, height / 2, front + Boombox.speakerDepth);
     });
-
-    // the screen: a dark frame with a plane in front of it. the plane's uv goes from 0 to 1, as the shader will want
     const frameWidth = Boombox.screenWidth + Boombox.frameBorder * 2;
     const frameHeight = Boombox.screenHeight + Boombox.frameBorder * 2;
     addBox(boombox, frameWidth, frameHeight, 0.02, Colors.outline, 0, Boombox.screenY, front + 0.005);
 
-    const screen = new THREE.Mesh(new THREE.PlaneGeometry(Boombox.screenWidth, Boombox.screenHeight), flat(Colors.windowDark));
+  
+    const visualiserTime = uniform(0); // seconds, so the bars move
+    const visualiserOn = uniform(0);   // 0 = screen off (black), 1 = bars playing
+    const screenMaterial = new THREE.MeshBasicNodeMaterial();
+    screenMaterial.colorNode = visualiserFn({ uv: uv(), time: visualiserTime, on: visualiserOn });
+    const screen = new THREE.Mesh(new THREE.PlaneGeometry(Boombox.screenWidth, Boombox.screenHeight), screenMaterial);
     screen.position.set(0, Boombox.screenY, front + 0.0175); // just in front of the frame, so the two do not flicker
     boombox.add(screen);
 
-    // two knobs under the screen
+    //knobs under the screen
     [-Boombox.knobX, Boombox.knobX].forEach((x) => {
         addDisc(boombox, Boombox.knobRadius, 0.03, Colors.hoopPole, x, Boombox.knobY, front + 0.015);
     });
 
-    // the carrying handle: a bar on two posts
+    //handle
     const postHeight = Boombox.handleRise;
     const handleX = Boombox.handleLength / 2 - 0.03;
     [-handleX, handleX].forEach((x) => {
@@ -64,7 +69,7 @@ export const createBoombox = () => {
     });
     addBox(boombox, Boombox.handleLength, 0.04, 0.05, Colors.outline, 0, height + postHeight + 0.01, 0);
 
-    // the antenna: a thin stick leaning back from the top right corner, with a ball on the end
+    //the antenna
     const antenna = new THREE.Mesh(
         new THREE.CylinderGeometry(Boombox.antennaRadius, Boombox.antennaRadius, Boombox.antennaLength, 8),
         flat(Colors.fencePost)
@@ -77,9 +82,9 @@ export const createBoombox = () => {
     antenna.rotation.set(-Boombox.antennaTilt, 0, -Boombox.antennaTilt); // leans backwards and to the right
     boombox.add(antenna);
 
-    // where it stands
+    //position
     boombox.position.set(Boombox.x, 0, Boombox.z);
     boombox.rotation.y = Boombox.facing;
 
-    return { boombox, screen };
+    return { boombox, screen, visualiser: { time: visualiserTime, on: visualiserOn } };
 };

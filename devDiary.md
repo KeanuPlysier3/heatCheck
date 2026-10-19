@@ -1949,3 +1949,112 @@ The `alt` texts describe each pose for screen readers and for when a picture doe
 **Why:** the pictures had been added to the project, but the `src` values were still empty, and the CSS hides an image with an empty `src`.
 
 **How it works:** Vite copies everything in `public/` unchanged into the build and serves it from the site's root. So `public/images/x.svg` is reached as `images/x.svg`, without `public/`. The path is relative (no leading `/`), which fits `base: './'` in `vite.config.js`: on GitHub Pages the game lives in a subfolder (`/heatCheck/`), and a path starting with `/` would look in the domain's root instead.
+
+## Equalizer shader on the boombox screen (shaders/visualiser.wgsl, shaders/visualisers.js, objects/boombox.js, script.js)
+
+**What:** the boombox screen shows animated equalizer bars: a second Shadertoy shader (Audio Visualizer Bars, https://www.shadertoy.com/view/WflXDr, original code in `shaders/visualisers.glsl`) ported to WGSL. The bars move while the music plays, and the screen goes black when the boombox is switched off.
+
+**Why:** a second shader is on the plan, and the screen was a plain dark plane waiting for it.
+
+**How it works:** the same setup as the fire shader.
+
+- **The WGSL file** (`visualiser.wgsl`) holds three plain functions in order: `randFloat`, `randColor` and `visualiser`. `visualisers.js` reads the file as text with `?raw`, cuts it at every `fn ` at the start of a line, and turns each piece into a node with `wgslFn`. The second argument lists the functions it calls: `randColor` needs `randFloat`, and `visualiser` needs both.
+- **What the shader does:**
+  - The screen's uv (0 to 1) is moved so the middle is 0 and multiplied by 30, which makes a grid of 30 by 30 cells.
+  - `floor` gives the cell (`id.x` is the column, `id.y` the row), and `fract - 0.5` gives the position inside the cell.
+  - Each column gets its own speed from `randFloat(id.x)`, and its bar height is `sin(time * speed * 2) * 8`. A cell lower than that height gets the column's random colour.
+  - A thin black line on two edges of every cell makes the bars look like LED blocks.
+- **Changes from the GLSL:**
+  - `fragCoord / iResolution` became the plane's own `uv`.
+  - `col` starts at `vec3f(0.0)`, because WGSL has no unset variables.
+  - The chained `r = g = b = 0.8` became three lines, because WGSL has no chained assignment.
+  - `vec3`/`vec4` became `vec3f`/`vec4f`, and every `if` got braces.
+  - A new `on` input multiplies the colour, like the fire's `heat`.
+- **The material** (in `createBoombox`) is a `MeshBasicNodeMaterial` whose `colorNode` is `visualiserFn({ uv: uv(), time, on })`. `time` and `on` are `uniform`s, and `createBoombox` returns them as `visualiser: { time, on }`, the way the basketball returns `fire: { time, heat }`.
+- **Every frame**, `updateBoombox(time)` sets `visualiser.time.value = time` and `visualiser.on.value` to 1 while the track plays and 0 when it does not, using the same `playing` check that drives the boombox's bounce.
+
+## Short part labels in the object files, and no console logging (js/objects, script.js, motionDetection.js)
+
+**What:**
+
+- **Object files:** in every file in `js/objects`, each comment block above a piece of code is now a short label naming the object or part it creates (`// body`, `// tail`, `// rim outline`, `// coping`), the way the boombox already did. Comments at the end of a line, which explain a single number or step, are kept.
+- **Logging:** every `console.log` and `console.error` call is removed from `script.js` and `motionDetection.js`. The camera's `catch` block keeps a one-line comment saying why it may be empty.
+- **Fix:** a stray character after the import in `shaders/visualisers.js` is removed. It would have stopped the whole game with a ReferenceError when the page loaded.
+
+**Why:** the long comments made the object files hard to scan, and the console was full of debug output that a player or grader does not need.
+
+**How it works:** the labels work like headings. Reading only the comments of `createBoombox` or `createSleeping` now gives the list of parts in the order they are built. The detailed explanations of how each part works stay in this dev diary.
+
+The error messages are gone too, but every place that catches an error still handles it: the upload button shows "Failed, retry", the leaderboard shows "Leaderboard unavailable", and without a camera the game is played with the keyboard. Only the console messages disappear.
+
+## The arms move when shooting with the spacebar (script.js)
+
+**What:** the spacebar handlers in `setEvents` set the player's arm pose too. Holding space puts the arms in the `loaded` pose (ball at the chest), letting go raises them into the `release` pose, and after `poseHold.release` milliseconds they go back to `default`.
+
+**Why:** the arms only moved with the webcam. With the keyboard the meter filled and the ball flew, but the character stood still.
+
+**How it works:**
+
+- **The shared target:** `updateArms()` eases the shoulder and elbow pivots towards `targetPose` every frame, whatever set it. Until now only `handlePose` (the webcam) set it. The keyboard handlers now set it to the same three poses from `Player.poses`, so both inputs move the arms the same way.
+- **Only real shots:** after `startMeter()`, the loaded pose is only set when `shotPhase` became `'aiming'`. `startMeter` refuses in the menu, during the 3-2-1, and while the ball is still flying, and then the arms do not move either.
+- **The order on release:** `wasAiming` is read before `releaseMeter()`, because that call changes the phase to `'flying'`. Checking afterwards would always say no shot was released.
+- **Back down:** the webcam's own return to `default` lives inside `handlePose`, which never runs without a camera. A `setTimeout` of `poseHold.release` (the same hold time the webcam uses after a release) puts the arms back down after a keyboard shot.
+
+## The webcam no longer overrides a spacebar shot (script.js)
+
+**What:** a new flag, `keyboardShot`. It is `true` from the moment a spacebar shot starts until the arms are back down after the release, and while it is `true` `handlePose` returns straight away.
+
+**Why:** with the spacebar the arms stayed down and flickered. The webcam runs all the time, and `handlePose` gets every camera frame. While the player held space, the camera saw their real arms hanging down: the `default` pose. So every frame it set `targetPose` back to `default` (the arms never rose, apart from a jolt on the first frame, which was the flicker) and called `resetMeter()`, which could even cancel the keyboard shot.
+
+**How it works:**
+
+- **Space down:** if `startMeter()` really started a shot (`shotPhase === 'aiming'`), the flag goes on and the arms get the loaded pose.
+- **Space up:** the arms get the release pose, and the `setTimeout` that brings them back down also turns the flag off, so from then on the webcam moves the arms again.
+- **Cancelled shot:** if the shot was cancelled while space was held (back to the menu, for example), the key-up finds nothing to release and turns the flag off too. Otherwise it would stay on and the webcam would never move the arms again.
+- **In `handlePose`:** the check is its first line, before any pose is read, so a keyboard shot is never disturbed. The two inputs take turns: the keyboard during its own shot, the webcam the rest of the time.
+
+## Spacebar shots jump too (script.js)
+
+**What:** letting go of space calls `startJump()` together with the release pose, so a keyboard shot is a jump shot like a webcam shot.
+
+**Why:** with the webcam the player jumps as the arms go up, and with the spacebar the player stayed on the ground.
+
+**How it works:** `startJump()` is the same function the webcam uses. It only starts a jump when the player is not already in the air (`if (!jumping)`), gives an upward speed, and `updateJump(delta)` in the render loop moves the player up and back down with gravity, frame-rate independent. It is called after `releaseMeter()`, so the shot is launched from the hand's position at the moment of release. `shoot()` works out the launch speed from wherever the ball is, so the jump does not change the aim.
+
+## script.js reorganised into themed groups (script.js)
+
+**What:** `script.js` is reordered into groups, each under one heading comment in capitals that says what the group is about:
+
+- **GAME STATE**
+- **SCENE**
+- **PHYSICS**
+- **SOUND**
+- **PLAYER MOVEMENT**
+- **SHOT METER**
+- **SHOOTING AND THE BALL**
+- **SPOTS AND CAMERA**
+- **INTERACTIVE OBJECTS**
+- **GAME MODES**
+- **TIMERS**
+- **STATS DISPLAY**
+- **LEADERBOARD**
+- **EVENTS**
+- **SETUP**
+- **RENDER LOOP**
+- **START**
+
+Each group keeps its own variables at the top, followed by the functions that use them.
+
+Smaller changes along the way:
+
+- **Comments:** the ones that only repeated the code (`// set the volume to 70% of the original`, `// enable shadows for this light`) are removed or shortened. The ones that explain a reason (the fixed physics step, why `wasAiming` is read first) stay.
+- **Repeated code:** the three menu descriptions used the same three listeners each, so that code is now one helper, `addDescription(button, description)`. `handleDeepshotsOnly` builds the spot once instead of in both branches of its `if`.
+- **Code that did nothing:**
+  - the unused imports `math` and `draw` from TensorFlow
+  - the unused `boomboxScreen`
+  - `shrinkDuration` in `shotReset`, and `p` and `onFloor` in `onMake`, which were never read
+  - the two lines in `init` that set the green zone again right after `drawGreen` had already done it
+
+**Why:** related code was spread over the whole file (the camera functions sat below `init`, the leaderboard below the helpers), which made the file hard to find your way around.
+
+**How it works:** the behaviour is the same, because only the order of declarations changed. That is safe because every `const` function is only *called* once the whole file has run. The code that runs straight away is the `START` group at the bottom, so by then every function and variable above it exists. The few top-level statements higher up (creating the audio objects, the debug GUI, `cameraGoal` and the cat's `ended` listener) do not call any function defined below them.

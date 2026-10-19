@@ -7,7 +7,7 @@ import { createOutlineMesh } from '../helpers/outline';
 // a flat, bright material like the player's: it ignores the light, so the colours stay as they are
 const flat = (color) => new THREE.MeshBasicMaterial({ color });
 
-// a box with a black outline around it, put at (x, y, z) inside parent
+
 const addBox = (parent, width, height, depth, color, x, y, z) => {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), flat(color));
     mesh.position.set(x, y, z);

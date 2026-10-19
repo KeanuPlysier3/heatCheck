@@ -24,7 +24,8 @@ import { resizeRendererToDisplaySize } from './helpers/resizeRenderer.js';
 import { uploadScore, fetchScores } from './db.js';
 import { math } from '@tensorflow/tfjs-core';
 import { draw } from '@tensorflow/tfjs-core/dist/ops/browser.js';
-import {makeClickable, setupPointer} from './helpers/pointer.js';
+import { makeClickable, setupPointer } from './helpers/pointer.js';
+import { createCat } from './objects/cat.js';
 
 
 //FLAGS
@@ -42,6 +43,8 @@ const isDev = import.meta.env.DEV;
 // true while the ball sits in the hand
 const ballIsHeld = () => shotPhase === 'idle' || shotPhase === 'aiming';
 
+
+let catMesh;
 let canvas;
 let renderer;
 let scene;
@@ -85,7 +88,9 @@ let stats = {
 const track = new Audio('music/lofi.mp3');
 track.volume = 0.07; // set the volume to 10% of the original
 
-
+const cat = new Audio('soundEffects/cat.mp3');
+cat.volume = 0.15; // set the volume to 15% of the original
+cat.pause();
 
 const swish = new Audio('soundEffects/swish1.mp3');
 swish.volume = 0.7; // set the volume to 70% of the original
@@ -115,8 +120,12 @@ let poseUntil = 0; // the current pose is kept until this time
 let jumpDelay = null; // the jump waiting to start (a setTimeout id), or null when none is waiting
 
 
-const toggleBoombox = () => {   
+const toggleBoombox = () => {
     track.paused ? track.play() : track.pause();
+}
+
+const toggleCat = () => {
+    cat.paused ? cat.play() : cat.pause();
 }
 
 const handlePose = (arms) => {
@@ -306,14 +315,14 @@ const shoot = (power = 1) => {
     const horizontal = Math.hypot(distanceX, distanceZ);   // flat distance from the hand to the rim
 
     let entryAngle;
-    
+
     ballBody.setLinearDamping(Basketball.linearDamping);
     if (mode === 'downtownCountdown' && stats.hotstreak || mode === 'freePlay' && deepShotsOnly) {
-         entryAngle = THREE.MathUtils.degToRad(45);  
-         ballBody.setLinearDamping(0);     // how steeply the ball drops into the rim
-         console.log('high arc');
+        entryAngle = THREE.MathUtils.degToRad(45);
+        ballBody.setLinearDamping(0);     // how steeply the ball drops into the rim
+        console.log('high arc');
     } else {
-         entryAngle = THREE.MathUtils.degToRad(55);       // how steeply the ball drops into the rim
+        entryAngle = THREE.MathUtils.degToRad(55);       // how steeply the ball drops into the rim
     }
     const time = Math.sqrt(2 * (horizontal * Math.tan(entryAngle) + distanceY) / gravity);
 
@@ -398,11 +407,11 @@ const onMiss = () => {
     drawGreen(Meter.greenWidth);
     if (mode === 'downtownCountdown') stats.hotstreak = false;
 
-    if (mode !== 'freeplay' && !deepshotsOnly){
-    const spot = Court.spots[stats.currentSpot];
-    playerMesh.position.set(spot.x, 0, spot.z);
-    playerMesh.rotation.y = spot.facing;
-    placeCamera(); // move the camera to the current spot's position
+    if (mode !== 'freeplay' && !deepshotsOnly) {
+        const spot = Court.spots[stats.currentSpot];
+        playerMesh.position.set(spot.x, 0, spot.z);
+        playerMesh.rotation.y = spot.facing;
+        placeCamera(); // move the camera to the current spot's position
     }
     stats.shootingPercentage = stats.shots > 0 ? (stats.madeShots / stats.shots) * 100 : 0;
     fire.heat.value = 0;
@@ -649,7 +658,7 @@ const setEvents = () => {
 
 
     document.querySelector('#freeCam').addEventListener('change', (event) => {
-    freeCam = !freeCam;
+        freeCam = !freeCam;
     });
 
     // the colour arrows on the menu: previous and next colour for the player
@@ -681,9 +690,41 @@ const setEvents = () => {
     });
 
     document.querySelector('#freePlayBtn').addEventListener('click', handleFreeplayClick);
-    document.querySelector('#aroundTheWorldBtn').addEventListener('click', handleAroundTheWorldClick);
-    document.querySelector('#downTownCountdownBtn').addEventListener('click', handleDowntownCountdownClick);
 
+    const aroundTheWorldBtn = document.querySelector('#aroundTheWorldBtn');
+    const downtownCountdownBtn = document.querySelector('#downTownCountdownBtn');
+    const aroundTheWorldDescription = document.querySelector('#aroundTheWorldDescription');
+    const downtownCountdownDescription = document.querySelector('#downTownCountdownDescription');
+
+    aroundTheWorldBtn.addEventListener('click', handleAroundTheWorldClick);
+    aroundTheWorldBtn.addEventListener('mouseover', () => {
+        aroundTheWorldDescription.classList.add('visible');
+    });
+
+    aroundTheWorldBtn.addEventListener('mousemove', (event) => {
+        aroundTheWorldDescription.style.left = `${event.clientX}px`;
+        aroundTheWorldDescription.style.top = `${event.clientY}px`;
+    });
+
+    aroundTheWorldBtn.addEventListener('mouseleave', () => {
+        aroundTheWorldDescription.classList.remove('visible');
+    });
+
+
+    downtownCountdownBtn.addEventListener('click', handleDowntownCountdownClick);
+
+    downtownCountdownBtn.addEventListener('mouseover', () => {
+        downtownCountdownDescription.classList.add('visible');
+    });
+
+    downtownCountdownBtn.addEventListener('mousemove', (event) => {
+        downtownCountdownDescription.style.left = `${event.clientX}px`;
+        downtownCountdownDescription.style.top = `${event.clientY}px`;
+    });
+
+    downtownCountdownBtn.addEventListener('mouseleave', () => {
+        downtownCountdownDescription.classList.remove('visible');
+    });
 
 
     document.querySelector('#deepShotOnlyCheckbox').addEventListener('change', (event) => {
@@ -715,7 +756,6 @@ const setEvents = () => {
         startDowntownCountdown();
     });
 
-    // PERFECT!: hidden when its css animation is over
     document.getElementById('shotPerfect').addEventListener('animationend', (event) => {
         event.target.hidden = true;
     });
@@ -806,6 +846,11 @@ const init = async () => {
     scene.add(player.player);
     makeAxisGrid(player.player, 'player', 1);
 
+    const cat = createCat();
+    catMesh = cat.cat; // the cat's y position, used for jumping
+    scene.add(cat);
+    makeClickable(cat, toggleCat);
+
     ({ basketball, ballMaterial, fire } = createBasketball());
     scene.add(basketball);
     makeAxisGrid(basketball, 'basketball', 1);
@@ -828,7 +873,7 @@ const init = async () => {
     placeCamera(true); // the goal is the menu pose too, so there is nothing to glide yet
     gui.add(controls, 'enabled').name('orbit camera (debug)'); // checkbox to switch the mouse control off
 
-    
+
     setupPointer(canvas, camera);
     setEvents(); // hook up every button and key in one place
 }
@@ -851,7 +896,7 @@ const handleDeepshotsOnly = () => {
 };
 
 const handleSpotChange = () => {
-    if (  mode==="freePlay" && deepshotsOnly || mode === 'downtownCountdown' && stats.hotstreak) {
+    if (mode === "freePlay" && deepshotsOnly || mode === 'downtownCountdown' && stats.hotstreak) {
         const spot = Court.spots[5];
         playerMesh.position.set(spot.x, 0, spot.z);
         playerMesh.rotation.y = spot.facing;
@@ -919,13 +964,13 @@ const loadLeaderboard = async (leaderboardMode) => {
         const { scores } = await fetchScores(leaderboardMode);
         const myName = (localStorage.getItem('username') || '').toLowerCase();
 
-        list.replaceChildren(); 
+        list.replaceChildren();
         scores.forEach((row) => {
             const item = document.createElement('li');
             const name = document.createElement('span');
             const score = document.createElement('span');
             name.className = 'leaderboard__name';
-            name.textContent = row.name; 
+            name.textContent = row.name;
             score.textContent = isTime ? formatTime(Number(row.score)) : row.score;
             item.append(name, score);
             list.append(item);
@@ -991,7 +1036,7 @@ const render = (time) => {
     }
 
     if (!freeCam) {
-        smoothCamera(delta); 
+        smoothCamera(delta);
     }
 
     controls.update(); // DEBUG ONLY: needed every frame for the orbit camera's damping

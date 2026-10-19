@@ -1126,6 +1126,26 @@
             color: #FFF1D0;
         }
 
+        .description {
+            z-index: 5;
+            position: fixed;
+            pointer-events: none;
+            margin: 0;
+            font-family: "Bowlby One", Impact, "Arial Black", sans-serif;
+            font-size: clamp(.75rem, 1.1vw, 1rem);
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            color: #FFF1D0;
+            text-shadow: .08em .08em 0 #1B1030;
+            background-color: #16C7B0;
+            opacity: 0;
+            transition: opacity .5s;
+        }
+
+       .visible {
+            opacity: 1;
+        }
+
         @keyframes loading-bounce {
 
 
@@ -1228,14 +1248,14 @@
         <p id="leaderboard__status" hidden></p>
     </section>
 
-        <form method="POST" action id="afterGame__form" hidden >
-            <label for="name">Name</label>
-            <input type="hidden" id="name" name="name">
-            <input type="hidden" id="score" name="score">
-            <input type="hidden" id="mode" name="mode">
-        </form>
+    <form method="POST" action id="afterGame__form" hidden>
+        <label for="name">Name</label>
+        <input type="hidden" id="name" name="name">
+        <input type="hidden" id="score" name="score">
+        <input type="hidden" id="mode" name="mode">
+    </form>
 
-       
+
 
     <div id="stats">
         <p>Points: <span id="points">0</span></p>
@@ -1250,7 +1270,7 @@
     </div>
     <canvas id="c"></canvas>
 
-    <label id="deepShotsOnly" class="stickerCheckbox" hidden >
+    <label id="deepShotsOnly" class="stickerCheckbox" hidden>
         <input type="checkbox" id="deepShotOnlyCheckbox">
         <span>deep shot only</span>
     </label>
@@ -1268,13 +1288,19 @@
             </h1>
             <button id="freePlayBtn">FreePlay</button>
             <button id="aroundTheWorldBtn">Around the World</button>
+
             <button id="downTownCountdownBtn">downtown countdown</button>
+
             <label id="performanceMode" class="stickerCheckbox">
                 <input type="checkbox" id="performanceModeCheckbox">
                 <span>performance mode</span>
             </label>
         </div>
-  
+
+        <div class="description"  id="aroundTheWorldDescription">Hit 3 shots across the 5 different spots on the
+            court as fast as possible!</div>
+        <div class="description"  id="downTownCountdownDescription">Hit as many shots as possible in 60s!</div>
+
         <label id="menu__name">
             <span class="menu__nameTag">player</span>
             <input type="text" id="usernameInput" placeholder="your name" maxlength="16" pattern="[A-Za-z0-9]{1,16}"
